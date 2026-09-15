@@ -1,4 +1,5 @@
 import { generateContentWithCascade, generateContentWithRetry, getJsonModel } from '../utils/geminiClient.js';
+import { predictExpenseCategoryTensorFlow } from './tensorflowService.js';
 
 function escapeHtml(value) {
   return String(value)
@@ -159,7 +160,23 @@ export async function autoCategorize(description) {
     return local;
   }
 
-  // 2. Try Gemini with JSON mode via cascade
+  // 2. Try TensorFlow-based prediction before Gemini for lightweight model inference
+  try {
+    const tfPrediction = await predictExpenseCategoryTensorFlow(description);
+    if (tfPrediction?.category && tfPrediction.category !== 'Miscellaneous') {
+      return {
+        category: tfPrediction.category,
+        tags: ['tensorflow', 'ai'],
+        merchant: extractLocalMerchant(description),
+      };
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('AI Service: TensorFlow categorization failed, falling back to Gemini/local logic.', error?.message || error);
+    }
+  }
+
+  // 3. Try Gemini with JSON mode via cascade
   const geminiModelJson = getJsonModel();
   if (geminiModelJson) {
     try {
@@ -183,7 +200,9 @@ export async function autoCategorize(description) {
         merchant: parsed.merchant || extractLocalMerchant(description),
       };
     } catch (error) {
-      console.warn('AI Service: Gemini categorization failed, using local fallback.', error?.status || error?.message);
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('AI Service: Gemini categorization failed, using local fallback.', error?.status || error?.message);
+      }
       return localCategorize(description);
     }
   }

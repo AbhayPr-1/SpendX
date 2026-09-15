@@ -4,6 +4,7 @@ import { jsonDb } from '../services/jsonDbService.js';
 import { autoCategorize, CATEGORIES } from '../services/aiService.js';
 import { detectRecurringPayments } from '../services/subscriptionService.js';
 import { generateForecast } from '../services/forecastService.js';
+import { predictExpenseCategoryTensorFlow } from '../services/tensorflowService.js';
 
 test('autoCategorize assigns categories accurately based on rules and keywords', async () => {
   const grocery = await autoCategorize('Whole Foods Supermarket groceries');
@@ -141,4 +142,14 @@ test('generateForecast produces future budget and spending projections', async (
   assert.ok(Array.isArray(forecast.historical));
   assert.ok(Array.isArray(forecast.projected));
   assert.ok(typeof forecast.trend === 'string');
+});
+
+test('predictExpenseCategoryTensorFlow recognizes major spending categories', async () => {
+  const transport = await predictExpenseCategoryTensorFlow('Uber airport pickup');
+  assert.ok(transport);
+  assert.equal(transport.category, 'Transport & Auto');
+
+  const shopping = await predictExpenseCategoryTensorFlow('Amazon electronics order');
+  assert.ok(shopping);
+  assert.equal(shopping.category, 'Shopping');
 });

@@ -8,8 +8,8 @@ dotenv.config();
 // ---------------------------------------------------------------------------
 
 const MODEL_CASCADE = [
-  process.env.GEMINI_MODEL || 'gemini-1.5-flash',
-  'gemini-2.5-flash',
+  process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  'gemini-1.5-flash',
   'gemini-1.5-flash-8b',
 ];
 
@@ -62,10 +62,12 @@ export async function generateContentWithRetry(model, prompt, retries = 3, baseD
 
       if (isRetryable && i < retries) {
         const waitMs = is429 ? extractRetryDelayMs(error, delay) : delay;
-        console.warn(
-          `Gemini API: ${is429 ? 'Quota/rate-limit' : 'Overloaded'} (attempt ${i + 1}/${retries}). ` +
-          `Waiting ${waitMs}ms before retry...`
-        );
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn(
+            `Gemini API: ${is429 ? 'Quota/rate-limit' : 'Overloaded'} (attempt ${i + 1}/${retries}). ` +
+            `Waiting ${waitMs}ms before retry...`
+          );
+        }
         await new Promise((resolve) => setTimeout(resolve, waitMs));
         delay = Math.round(delay * 2); // exponential backoff for subsequent retries
       } else {
@@ -100,11 +102,15 @@ if (geminiApiKey) {
       }),
     };
 
-    console.log(`Gemini Client: initialized (primary model: ${primary}, cascade: ${MODEL_CASCADE.join(' → ')}).`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`Gemini Client: initialized (primary model: ${primary}, cascade: ${MODEL_CASCADE.join(' → ')}).`);
+    }
   } catch (error) {
-    console.error('Gemini Client: initialization failed.', error);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Gemini Client: initialization failed.', error);
+    }
   }
-} else {
+} else if (process.env.NODE_ENV !== 'test') {
   console.log('Gemini Client: No GEMINI_API_KEY found — running in local fallback mode.');
 }
 
@@ -166,7 +172,9 @@ export async function generateContentWithCascade(prompt, type = 'text') {
         status === 429 || msg.includes('429') || msg.toLowerCase().includes('quota');
 
       if (isQuotaExhausted && MODEL_CASCADE.indexOf(modelName) < MODEL_CASCADE.length - 1) {
-        console.warn(`Gemini: Quota exhausted on ${modelName}, trying next model in cascade...`);
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn(`Gemini: Quota exhausted on ${modelName}, trying next model in cascade...`);
+        }
         lastError = error;
         continue;
       }
