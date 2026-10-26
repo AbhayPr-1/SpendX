@@ -115,21 +115,24 @@ export function detectRecurringPayments(transactions) {
  * Iterates through all active subscriptions and creates ledger transactions if they fall due.
  * Runs on backend start or can be manually triggered.
  */
-export async function checkAndLogDueSubscriptions(jsonDbMode = false) {
+export async function checkAndLogDueSubscriptions(jsonDbMode = false, userId = null) {
   const now = new Date();
   let subscriptions = [];
   
   if (jsonDbMode) {
-    subscriptions = await jsonDb.getSubscriptions();
+    subscriptions = userId
+      ? await jsonDb.getSubscriptions(userId)
+      : await jsonDb.getAllSubscriptionsForScheduler();
   } else {
-    subscriptions = await Subscription.find({ status: 'active' });
+    subscriptions = await Subscription.find({
+      status: 'active',
+      ...(userId ? { userId } : {})
+    });
   }
 
   let loggedCount = 0;
-  const updatedSubscriptions = [];
-
   for (let sub of subscriptions) {
-    if (sub.status !== 'active') continue;
+    if (sub.status !== 'active' || !sub.userId) continue;
 
     let subDate = new Date(sub.nextDueDate);
     let modified = false;
@@ -149,9 +152,9 @@ export async function checkAndLogDueSubscriptions(jsonDbMode = false) {
       };
 
       if (jsonDbMode) {
-        await jsonDb.createTransaction(newTxData);
+        await jsonDb.createTransaction(sub.userId, newTxData);
       } else {
-        const tx = new Transaction(newTxData);
+        const tx = new Transaction({ ...newTxData, userId: sub.userId });
         await tx.save();
       }
 
@@ -185,10 +188,10 @@ export async function checkAndLogDueSubscriptions(jsonDbMode = false) {
         status: sub.status
       };
       if (jsonDbMode) {
-        await jsonDb.updateSubscription(sub._id, updates);
+        await jsonDb.updateSubscription(sub.userId, sub._id, updates);
       } else {
         // Mongoose save
-        await Subscription.findByIdAndUpdate(sub._id, updates);
+        await Subscription.findOneAndUpdate({ _id: sub._id, userId: sub.userId }, updates);
       }
     }
   }

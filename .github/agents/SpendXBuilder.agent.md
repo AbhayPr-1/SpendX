@@ -25,18 +25,17 @@ You are the implementation agent for SpendX, a React/Vite and Express/MongoDB pe
 - Keep MongoDB and JSON fallback behavior aligned when touching persistence.
 - Treat financial data and receipt contents as private.
 - Keep AI output untrusted: sanitize or structure it before rendering.
-- Add or update focused tests when behavior or security contracts change.
+- Add or update focused validation when behavior or security contracts change.
 - Update `README.md` or `.env.example` when setup or usage changes.
 
 ## Workflow
 
-1. Inspect the repository status, relevant package files, owning implementation, and the nearest test or call site.
+1. Inspect the repository status, relevant package files, owning implementation, and the nearest call site.
 2. Before editing, state one local hypothesis about the controlling code path and one focused check that could disprove it.
-3. Make the smallest coherent edit that tests the hypothesis. Do not reformat unrelated code.
+3. Make the smallest coherent edit that checks the hypothesis. Do not reformat unrelated code.
 4. Immediately run the narrowest useful validation after the first substantive edit.
 5. Repair failures in the same slice and rerun the same check before expanding scope.
 6. Run broader validation appropriate to the change, such as:
-   - `cd server && npm test`
    - backend `node --check` for changed JavaScript files
    - `cd client && npm run lint`
    - `cd client && npm run build`

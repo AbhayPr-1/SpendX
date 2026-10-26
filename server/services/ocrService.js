@@ -205,7 +205,7 @@ export async function scanReceiptWithVision(filePath) {
   const fileBuffer = fs.readFileSync(filePath);
   const base64Data = fileBuffer.toString('base64');
 
-  const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
   const visionModel = genAI.getGenerativeModel({
     model: modelName,
     generationConfig: { responseMimeType: 'application/json' }
@@ -281,7 +281,7 @@ export async function scanReceiptWithTesseract(filePath) {
     if (worker) {
       try {
         await worker.terminate();
-      } catch (e) {
+      } catch {
         // Ignore termination error
       }
     }
@@ -347,7 +347,7 @@ export async function scanReceipt(imageInput) {
     try {
       const categorization = await autoCategorize(parsedData.merchant || ocrText.slice(0, 100));
       parsedData.category = categorization.category;
-    } catch (e) {
+    } catch {
       parsedData.category = 'Miscellaneous';
     }
   }

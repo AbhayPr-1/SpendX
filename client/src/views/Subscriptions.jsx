@@ -1,22 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   CalendarRange, Sparkles, Check, AlertCircle, Plus, Trash2, 
   Play, Pause, Calendar, IndianRupee, Tv, Wifi, Car,
   Utensils, ShoppingBag, HeartPulse, GraduationCap, Plane, 
   HelpCircle, Clock, CheckCircle2, AlertTriangle 
 } from 'lucide-react';
-
-const CATEGORIES = [
-  'Food & Dining',
-  'Transport & Auto',
-  'Utilities & Bills',
-  'Shopping',
-  'Entertainment',
-  'Healthcare & Fitness',
-  'Education',
-  'Travel',
-  'Miscellaneous'
-];
+import { EXPENSE_CATEGORIES } from '../utils/categories';
 
 const getCategoryIcon = (category) => {
   switch (category) {
@@ -46,6 +35,21 @@ const getCategoryColor = (category) => {
   }
 };
 
+function createDefaultForm(isEMI = false) {
+  return {
+    description: '',
+    amount: '',
+    category: isEMI ? 'Utilities & Bills' : 'Entertainment',
+    merchant: '',
+    billingCycle: 'monthly',
+    nextDueDate: new Date().toISOString().slice(0, 10),
+    paymentMethod: isEMI ? 'NetBanking' : 'Card',
+    isEMI,
+    tenureMonths: 12,
+    remainingMonths: 12
+  };
+}
+
 export default function Subscriptions() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [candidates, setCandidates] = useState([]);
@@ -57,18 +61,7 @@ export default function Subscriptions() {
   const [activeTab, setActiveTab] = useState('All');
 
   // Form State
-  const [form, setForm] = useState({
-    description: '',
-    amount: '',
-    category: 'Entertainment',
-    merchant: '',
-    billingCycle: 'monthly',
-    nextDueDate: new Date().toISOString().slice(0, 10),
-    paymentMethod: 'Card',
-    isEMI: false,
-    tenureMonths: 12,
-    remainingMonths: 12
-  });
+  const [form, setForm] = useState(createDefaultForm());
 
   const fetchData = async () => {
     try {
@@ -149,18 +142,7 @@ export default function Subscriptions() {
 
       if (res.ok) {
         setActiveModal(null);
-        setForm({
-          description: '',
-          amount: '',
-          category: 'Entertainment',
-          merchant: '',
-          billingCycle: 'monthly',
-          nextDueDate: new Date().toISOString().slice(0, 10),
-          paymentMethod: 'Card',
-          isEMI: false,
-          tenureMonths: 12,
-          remainingMonths: 12
-        });
+        setForm(createDefaultForm());
         fetchData();
       } else {
         alert('Failed to save subscription.');
@@ -305,18 +287,7 @@ export default function Subscriptions() {
           <button 
             className="btn btn-secondary" 
             onClick={() => {
-              setForm({
-                description: '',
-                amount: '',
-                category: 'Entertainment',
-                merchant: '',
-                billingCycle: 'monthly',
-                nextDueDate: new Date().toISOString().slice(0, 10),
-                paymentMethod: 'Card',
-                isEMI: false,
-                tenureMonths: 12,
-                remainingMonths: 12
-              });
+              setForm(createDefaultForm());
               setActiveModal('subscription');
             }} 
             style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '12px', borderColor: 'var(--border-light)' }}
@@ -326,18 +297,7 @@ export default function Subscriptions() {
           <button 
             className="btn btn-primary" 
             onClick={() => {
-              setForm({
-                description: '',
-                amount: '',
-                category: 'Utilities & Bills',
-                merchant: '',
-                billingCycle: 'monthly',
-                nextDueDate: new Date().toISOString().slice(0, 10),
-                paymentMethod: 'NetBanking',
-                isEMI: true,
-                tenureMonths: 12,
-                remainingMonths: 12
-              });
+              setForm(createDefaultForm(true));
               setActiveModal('emi');
             }} 
             style={{ 
@@ -726,7 +686,7 @@ export default function Subscriptions() {
                 <div className="form-group">
                   <label>Category</label>
                   <select name="category" value={form.category} onChange={handleInputChange}>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
@@ -876,7 +836,7 @@ export default function Subscriptions() {
               <div className="form-group">
                 <label>Category</label>
                 <select name="category" value={form.category} onChange={handleInputChange}>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
 

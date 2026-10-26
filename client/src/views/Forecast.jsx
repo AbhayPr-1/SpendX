@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { TrendingUp, Sparkles, Check, AlertCircle, Calendar, ArrowUpRight, ArrowDownRight, IndianRupee } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 import { sanitizeHtml } from '../utils/sanitizeHtml';

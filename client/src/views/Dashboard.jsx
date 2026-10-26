@@ -1,9 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IndianRupee, Receipt, Sparkles, Plus, ArrowRight, Wallet } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
+import { getBadgeClass } from '../utils/categoryStyles';
+import { EXPENSE_CATEGORIES } from '../utils/categories';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title);
 
@@ -125,20 +127,6 @@ export default function Dashboard() {
     } finally {
       setSavingTransaction(false);
     }
-  };
-
-  // Helper to map category names to badge CSS classes
-  const getBadgeClass = (category) => {
-    const cat = category.toLowerCase();
-    if (cat.includes('food')) return 'badge-food';
-    if (cat.includes('transport') || cat.includes('auto')) return 'badge-transport';
-    if (cat.includes('utility') || cat.includes('bill')) return 'badge-utilities';
-    if (cat.includes('shopping')) return 'badge-shopping';
-    if (cat.includes('entertainment')) return 'badge-entertainment';
-    if (cat.includes('health') || cat.includes('fitness')) return 'badge-healthcare';
-    if (cat.includes('education')) return 'badge-education';
-    if (cat.includes('travel')) return 'badge-travel';
-    return 'badge-misc';
   };
 
   // Prepare chart data
@@ -475,15 +463,7 @@ export default function Dashboard() {
                   <label>Category (Optional)</label>
                   <select name="category" value={form.category} onChange={handleInputChange}>
                     <option value="">Auto-Detect (AI)</option>
-                    <option value="Food & Dining">Food & Dining</option>
-                    <option value="Transport & Auto">Transport & Auto</option>
-                    <option value="Utilities & Bills">Utilities & Bills</option>
-                    <option value="Shopping">Shopping</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Healthcare & Fitness">Healthcare & Fitness</option>
-                    <option value="Education">Education</option>
-                    <option value="Travel">Travel</option>
-                    <option value="Miscellaneous">Miscellaneous</option>
+                    {EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
                   </select>
                 </div>
                 <div className="form-group">

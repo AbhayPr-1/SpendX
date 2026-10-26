@@ -171,9 +171,7 @@ export async function autoCategorize(description) {
       };
     }
   } catch (error) {
-    if (process.env.NODE_ENV !== 'test') {
-      console.warn('AI Service: TensorFlow categorization failed, falling back to Gemini/local logic.', error?.message || error);
-    }
+    console.warn('AI Service: TensorFlow categorization failed, falling back to Gemini/local logic.', error?.message || error);
   }
 
   // 3. Try Gemini with JSON mode via cascade
@@ -200,9 +198,7 @@ export async function autoCategorize(description) {
         merchant: parsed.merchant || extractLocalMerchant(description),
       };
     } catch (error) {
-      if (process.env.NODE_ENV !== 'test') {
-        console.warn('AI Service: Gemini categorization failed, using local fallback.', error?.status || error?.message);
-      }
+      console.warn('AI Service: Gemini categorization failed, using local fallback.', error?.status || error?.message);
       return localCategorize(description);
     }
   }
@@ -221,6 +217,44 @@ export async function autoCategorize(description) {
  * @param {string|null} question
  * @returns {string} HTML
  */
+const FINANCE_CONTEXT_KEYWORDS = [
+  'budget', 'budgets', 'spend', 'spent', 'expense', 'expenses', 'transaction', 'transactions',
+  'money', 'cash', 'cashflow', 'cash flow', 'saving', 'savings', 'goal', 'goals',
+  'subscription', 'subscriptions', 'payment', 'payments', 'merchant', 'category', 'categories',
+  'forecast', 'financial', 'finance', 'income', 'outflow', 'inflow', 'debt', 'loan', 'credit',
+  'rupee', 'rupees', '₹', 'bill', 'bills', 'shopping', 'food', 'dining', 'utility', 'utilities',
+  'travel', 'health', 'education', 'entertainment'
+];
+
+function isFinanceOnlyQuestion(question) {
+  if (!question || !question.trim()) return true;
+
+  const normalized = question.toLowerCase();
+  const hasFinanceKeyword = FINANCE_CONTEXT_KEYWORDS.some((keyword) => normalized.includes(keyword));
+
+  const nonFinanceSignals = [
+    'weather', 'news', 'joke', 'movie', 'song', 'recipe', 'travel plan', 'politics',
+    'sports', 'game', 'history', 'science', 'math', 'programming', 'relationship', 'love',
+    'dating', 'stock market tips', 'cryptocurrency', 'technology', 'ai assistant general'
+  ];
+
+  const hasNonFinanceSignal = nonFinanceSignals.some((signal) => normalized.includes(signal));
+
+  return hasFinanceKeyword && !hasNonFinanceSignal;
+}
+
+function buildFinanceOnlyResponse(question) {
+  const promptText = question && question.trim()
+    ? `I can only help with finance and personal budgeting topics, not general questions. Ask me about expenses, budgets, subscriptions, savings goals, cash flow, or forecast planning.`
+    : `I can only help with finance and personal budgeting topics. Ask me about your spending, limits, subscriptions, savings goals, or forecasts.`;
+
+  return `
+    <h4>📊 Finance-only assistant</h4>
+    <p>${escapeHtml(promptText)}</p>
+    <p><strong>Examples:</strong> “Where am I overspending?”, “How much did I spend on food this month?”, “Review my subscriptions”, “Set a savings goal plan”.</p>
+  `;
+}
+
 function buildLocalInsights(summary, budgetSummary, question) {
   const sortedCats = Object.entries(summary.categories)
     .sort(([, a], [, b]) => b - a);
@@ -296,6 +330,11 @@ function buildLocalInsights(summary, budgetSummary, question) {
 
   // Handle free-text question locally
   if (question) {
+    if (!isFinanceOnlyQuestion(question)) {
+      html += `<div>${buildFinanceOnlyResponse(question)}</div>`;
+      return html;
+    }
+
     const q = question.toLowerCase();
     let answer = '';
 
@@ -312,7 +351,7 @@ function buildLocalInsights(summary, budgetSummary, question) {
     } else if (q.includes('total') || q.includes('spent') || q.includes('spend')) {
       answer = `Your total spending is ₹${summary.totalSpent.toFixed(2)} across ${summary.txCount} transactions.`;
     } else {
-      answer = `I can see your total spend is ₹${summary.totalSpent.toFixed(2)}. For personalised AI answers, please configure a GEMINI_API_KEY in the server environment.`;
+      answer = `I can help with finance questions like totals, budgets, subscriptions, and forecasts. Ask about your spending or goals.`;
     }
 
     html += `<div><p><strong>Q: ${escapeHtml(question)}</strong></p><p>${answer}</p></div>`;
@@ -343,6 +382,10 @@ export async function getFinancialAdvisorInsights(transactions, budgets, questio
     return acc;
   }, {});
 
+  if (question && !isFinanceOnlyQuestion(question)) {
+    return buildFinanceOnlyResponse(question);
+  }
+
   // --- Always try Gemini first via cascade (handles quota exhaustion automatically) ---
   try {
     const dataContext = {
@@ -356,8 +399,8 @@ export async function getFinancialAdvisorInsights(transactions, budgets, questio
     };
 
     const prompt = question
-      ? `You are FinanceAI, a professional financial advisor. The user asks: "${question}".\nSpending context:\n${JSON.stringify(dataContext, null, 2)}\n\nAnswer concisely and directly based on the data. Use ₹ for currency. Format as clean HTML using only: h4, p, ul, ol, li, strong, em. Do NOT use markdown or code blocks.`
-      : `You are FinanceAI, a professional financial advisor. Analyze the spending data below and provide exactly 3 actionable insights.\nData:\n${JSON.stringify(dataContext, null, 2)}\n\nUse ₹ for currency. Format as clean HTML using only: h4, p, ul, ol, li, strong, em. Do NOT use markdown or code blocks. Keep each insight concise (2-3 sentences).`;
+      ? `You are FinanceAI, a professional financial advisor. The user asks: "${question}".\n\nIMPORTANT: Stay strictly within personal finance, spending, budgeting, subscriptions, savings goals, cash flow, and forecasting topics only. If the request is unrelated to money or personal finance, politely refuse and redirect the user back to finance topics.\n\nSpending context:\n${JSON.stringify(dataContext, null, 2)}\n\nAnswer concisely and directly based on the data. Use ₹ for currency. Format as clean HTML using only: h4, p, ul, ol, li, strong, em. Do NOT use markdown or code blocks.`
+      : `You are FinanceAI, a professional financial advisor. Analyze the spending data below and provide exactly 3 actionable insights.\n\nIMPORTANT: Stay strictly within personal finance, spending, budgeting, subscriptions, savings goals, cash flow, and forecasting topics only. Do not answer unrelated questions.\n\nData:\n${JSON.stringify(dataContext, null, 2)}\n\nUse ₹ for currency. Format as clean HTML using only: h4, p, ul, ol, li, strong, em. Do NOT use markdown or code blocks. Keep each insight concise (2-3 sentences).`;
 
     const result = await generateContentWithCascade(prompt, 'text');
     const text = result.response.text().trim();

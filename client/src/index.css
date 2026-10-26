@@ -468,7 +468,7 @@ body {
 }
 
 /* ── Typography ───────────────────────────────────────────── */
-.view-header {
+.view-header, .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -487,10 +487,6 @@ body {
   margin-top: 2px; transition: color var(--t-smooth);
 }
 
-.page-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 24px; flex-wrap: wrap; gap: 16px;
-}
 .page-title {
   font-size: 24px; font-weight: 700;
   color: var(--text-primary); letter-spacing: -0.5px;
@@ -734,7 +730,6 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 input:not(:focus):hover,
 select:not(:focus):hover,
 textarea:not(:focus):hover {
-  border-color: var(--color-primary);
   border-color: rgba(134,110,199,0.40);
 }
 
@@ -1355,7 +1350,6 @@ tr:hover td { background-color: var(--bg-card-hover); }
 }
 @media (max-width: 480px) {
   .kpi-grid { grid-template-columns: 1fr; }
-  .ocr-layout { grid-template-columns: 1fr; }
 }
 
 /* ── Scrollbar (global) ───────────────────────────────────── */

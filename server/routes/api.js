@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import Transaction from '../models/Transaction.js';
@@ -45,6 +46,31 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function ownedQuery(req, query = {}) {
+  return { ...query, userId: req.userId };
+}
+
+function getMonthRange(month) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return {
+    start: new Date(Date.UTC(year, monthNumber - 1, 1)),
+    end: new Date(Date.UTC(year, monthNumber, 1))
+  };
+}
+
+function ownedUpdates(updates) {
+  const safeUpdates = {};
+  for (const [key, value] of Object.entries(updates || {})) {
+    if (key.includes('.') || key.includes('$') || key === '_id' || key === 'userId') continue;
+    safeUpdates[key] = value;
+  }
+  return safeUpdates;
+}
+
+function receiptOwnerPrefix(userId) {
+  return createHash('sha256').update(userId).digest('hex');
+}
+
 // Setup Multer for receipt uploads (safe for both local filesystem and serverless /tmp)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,7 +91,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    cb(null, `${receiptOwnerPrefix(req.userId)}-${uniqueSuffix}${path.extname(file.originalname)}`);
   }
 });
 
@@ -90,11 +116,11 @@ const upload = multer({
 router.get('/transactions', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      const transactions = await jsonDb.getTransactions(req.query);
+      const transactions = await jsonDb.getTransactions(req.userId, req.query);
       return res.json(transactions);
     }
     const { category, search, month, sortBy } = req.query;
-    let query = {};
+    const query = ownedQuery(req);
 
     if (category) {
       query.category = category;
@@ -109,33 +135,17 @@ router.get('/transactions', async (req, res) => {
     }
 
     if (month) {
-      // month is expected as 'YYYY-MM'
-      const start = new Date(`${month}-01T00:00:00.000Z`);
-      const year = parseInt(month.split('-')[0]);
-      const nextMonth = parseInt(month.split('-')[1]);
-      
-      let end;
-      if (nextMonth === 12) {
-        end = new Date(`${year + 1}-01-01T00:00:00.000Z`);
-      } else {
-        const nextMonthStr = String(nextMonth + 1).padStart(2, '0');
-        end = new Date(`${year}-${nextMonthStr}-01T00:00:00.000Z`);
-      }
-
+      const { start, end } = getMonthRange(month);
       query.date = { $gte: start, $lt: end };
     }
 
-    let sortObj = { date: -1 };
-    if (sortBy === 'createdAt') {
-      sortObj = { createdAt: -1 };
-    } else if (sortBy === 'dateAsc') {
-      sortObj = { date: 1 };
-    } else if (sortBy === 'amountDesc') {
-      sortObj = { amount: -1 };
-    } else if (sortBy === 'amountAsc') {
-      sortObj = { amount: 1 };
-    }
-
+    const sortOptions = {
+      createdAt: { createdAt: -1 },
+      dateAsc: { date: 1 },
+      amountDesc: { amount: -1 },
+      amountAsc: { amount: 1 }
+    };
+    const sortObj = sortOptions[sortBy] || { date: -1 };
     const transactions = await Transaction.find(query).sort(sortObj);
     res.json(transactions);
   } catch (error) {
@@ -147,7 +157,7 @@ router.get('/transactions', async (req, res) => {
 router.post('/transactions', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      const transaction = await jsonDb.createTransaction(req.body);
+      const transaction = await jsonDb.createTransaction(req.userId, req.body);
       return res.status(201).json(transaction);
     }
     const { description, amount, date, paymentMethod, merchant, tags, notes, category, receiptUrl } = req.body;
@@ -171,6 +181,7 @@ router.post('/transactions', async (req, res) => {
     }
 
     const transaction = new Transaction({
+      userId: req.userId,
       description,
       amount,
       date: date || new Date(),
@@ -194,15 +205,15 @@ router.post('/transactions', async (req, res) => {
 router.put('/transactions/:id', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      const transaction = await jsonDb.updateTransaction(req.params.id, req.body);
+      const transaction = await jsonDb.updateTransaction(req.userId, req.params.id, ownedUpdates(req.body));
       if (!transaction) {
         return res.status(404).json({ error: 'Transaction not found' });
       }
       return res.json(transaction);
     }
-    const transaction = await Transaction.findByIdAndUpdate(
-      req.params.id,
-      req.body,
+    const transaction = await Transaction.findOneAndUpdate(
+      ownedQuery(req, { _id: req.params.id }),
+      ownedUpdates(req.body),
       { new: true, runValidators: true }
     );
     if (!transaction) {
@@ -218,13 +229,13 @@ router.put('/transactions/:id', async (req, res) => {
 router.delete('/transactions/:id', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      const result = await jsonDb.deleteTransaction(req.params.id);
+      const result = await jsonDb.deleteTransaction(req.userId, req.params.id);
       if (!result) {
         return res.status(404).json({ error: 'Transaction not found' });
       }
       return res.json({ message: 'Transaction deleted successfully' });
     }
-    const transaction = await Transaction.findByIdAndDelete(req.params.id);
+    const transaction = await Transaction.findOneAndDelete(ownedQuery(req, { _id: req.params.id }));
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
@@ -244,10 +255,10 @@ router.get('/budgets', async (req, res) => {
       return res.status(400).json({ error: 'Month query parameter is required (YYYY-MM)' });
     }
     if (mongoose.connection.readyState !== 1) {
-      const budgets = await jsonDb.getBudgets(month);
+      const budgets = await jsonDb.getBudgets(req.userId, month);
       return res.json(budgets);
     }
-    const budgets = await Budget.find({ month });
+    const budgets = await Budget.find(ownedQuery(req, { month }));
     res.json(budgets);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -262,14 +273,14 @@ router.post('/budgets', async (req, res) => {
       return res.status(400).json({ error: 'category, limit, and month are required' });
     }
     if (mongoose.connection.readyState !== 1) {
-      const budget = await jsonDb.updateBudget(req.body);
+      const budget = await jsonDb.updateBudget(req.userId, req.body);
       return res.json(budget);
     }
 
     // Use upsert to create or update budget
     const budget = await Budget.findOneAndUpdate(
-      { category, month },
-      { limit },
+      ownedQuery(req, { category, month }),
+      { limit, userId: req.userId },
       { new: true, upsert: true, runValidators: true }
     );
     res.json(budget);
@@ -288,29 +299,19 @@ router.get('/dashboard/stats', async (req, res) => {
       return res.status(400).json({ error: 'Month parameter is required (YYYY-MM)' });
     }
     if (mongoose.connection.readyState !== 1) {
-      const stats = await jsonDb.getDashboardStats(month);
+      const stats = await jsonDb.getDashboardStats(req.userId, month);
       return res.json(stats);
     }
 
-    const start = new Date(`${month}-01T00:00:00.000Z`);
-    const year = parseInt(month.split('-')[0]);
-    const m = parseInt(month.split('-')[1]);
-    
-    let end;
-    if (m === 12) {
-      end = new Date(`${year + 1}-01-01T00:00:00.000Z`);
-    } else {
-      const nextMonthStr = String(m + 1).padStart(2, '0');
-      end = new Date(`${year}-${nextMonthStr}-01T00:00:00.000Z`);
-    }
+    const { start, end } = getMonthRange(month);
 
     // Get transactions for the month
-    const transactions = await Transaction.find({
+    const transactions = await Transaction.find(ownedQuery(req, {
       date: { $gte: start, $lt: end }
-    });
+    }));
 
     // Get budgets for the month
-    const budgets = await Budget.find({ month });
+    const budgets = await Budget.find(ownedQuery(req, { month }));
 
     // Aggregate calculations
     let totalSpent = 0;
@@ -347,9 +348,9 @@ router.get('/dashboard/stats', async (req, res) => {
     });
 
     // Recent 5 transactions
-    const recentTransactions = await Transaction.find({
+    const recentTransactions = await Transaction.find(ownedQuery(req, {
       date: { $gte: start, $lt: end }
-    })
+    }))
       .sort({ date: -1 })
       .limit(5);
 
@@ -368,7 +369,7 @@ router.get('/dashboard/stats', async (req, res) => {
 router.get('/dashboard/history', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      const history = await jsonDb.getHistoryStats();
+      const history = await jsonDb.getHistoryStats(req.userId);
       return res.json(history);
     }
 
@@ -381,23 +382,16 @@ router.get('/dashboard/history', async (req, res) => {
       const monthIndex = targetDate.getMonth();
       const monthStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
 
-      const start = new Date(`${monthStr}-01T00:00:00.000Z`);
-      let end;
-      if (monthIndex === 11) {
-        end = new Date(`${year + 1}-01-01T00:00:00.000Z`);
-      } else {
-        const nextMonthStr = String(monthIndex + 2).padStart(2, '0');
-        end = new Date(`${year}-${nextMonthStr}-01T00:00:00.000Z`);
-      }
+      const { start, end } = getMonthRange(monthStr);
 
       // Aggregate spent
-      const txs = await Transaction.find({
+      const txs = await Transaction.find(ownedQuery(req, {
         date: { $gte: start, $lt: end }
-      });
+      }));
       const spent = txs.reduce((sum, t) => sum + t.amount, 0);
 
       // Aggregate budget limits
-      const bgts = await Budget.find({ month: monthStr });
+      const bgts = await Budget.find(ownedQuery(req, { month: monthStr }));
       const budgetLimit = bgts.reduce((sum, b) => sum + b.limit, 0);
 
       const monthLabel = targetDate.toLocaleString('default', { month: 'short', year: '2-digit' });
@@ -445,6 +439,9 @@ router.post('/ocr/scan', upload.single('receipt'), async (req, res) => {
 
 router.get('/uploads/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);
+  if (!filename.startsWith(`${receiptOwnerPrefix(req.userId)}-`)) {
+    return res.status(404).json({ error: 'Receipt not found' });
+  }
   let filePath = path.join(uploadsDir, filename);
   if (!fs.existsSync(filePath)) {
     filePath = path.join(__dirname, '../uploads', filename);
@@ -462,36 +459,26 @@ router.post('/advisor/chat', async (req, res) => {
     const month = req.body.month || currentMonthDefault;
     const question = req.body.question || req.body.message || req.body.prompt || null;
 
-    const start = new Date(`${month}-01T00:00:00.000Z`);
-    const year = parseInt(month.split('-')[0]) || new Date().getFullYear();
-    const m = parseInt(month.split('-')[1]) || (new Date().getMonth() + 1);
-    
-    let end;
-    if (m === 12) {
-      end = new Date(`${year + 1}-01-01T00:00:00.000Z`);
-    } else {
-      const nextMonthStr = String(m + 1).padStart(2, '0');
-      end = new Date(`${year}-${nextMonthStr}-01T00:00:00.000Z`);
-    }
+    const { start, end } = getMonthRange(month);
 
     // Fetch transactions & budgets
     let transactions, budgets;
     if (mongoose.connection.readyState !== 1) {
-      transactions = await jsonDb.getTransactions({ month });
-      budgets = await jsonDb.getBudgets(month);
+      transactions = await jsonDb.getTransactions(req.userId, { month });
+      budgets = await jsonDb.getBudgets(req.userId, month);
     } else {
-      transactions = await Transaction.find({ date: { $gte: start, $lt: end } });
-      budgets = await Budget.find({ month });
+      transactions = await Transaction.find(ownedQuery(req, { date: { $gte: start, $lt: end } }));
+      budgets = await Budget.find(ownedQuery(req, { month }));
     }
 
     // If the current month has no data, supplement with recent all-time transactions
     // so the AI always has meaningful context to analyse
     if (transactions.length === 0) {
       if (mongoose.connection.readyState !== 1) {
-        const allTx = await jsonDb.getTransactions({});
+        const allTx = await jsonDb.getTransactions(req.userId, {});
         transactions = allTx.slice(-50); // last 50 across all time
       } else {
-        transactions = await Transaction.find().sort({ date: -1 }).limit(50);
+        transactions = await Transaction.find(ownedQuery(req)).sort({ date: -1 }).limit(50);
       }
     }
 
@@ -512,11 +499,11 @@ router.get('/dashboard/forecast', async (req, res) => {
   try {
     let transactions, budgets;
     if (mongoose.connection.readyState !== 1) {
-      transactions = await jsonDb.getTransactions({});
-      budgets = await jsonDb.getAllBudgets();
+      transactions = await jsonDb.getTransactions(req.userId, {});
+      budgets = await jsonDb.getAllBudgets(req.userId);
     } else {
-      transactions = await Transaction.find();
-      budgets = await Budget.find();
+      transactions = await Transaction.find(ownedQuery(req));
+      budgets = await Budget.find(ownedQuery(req));
     }
 
     const forecastData = await generateForecast(transactions, budgets);
@@ -536,13 +523,13 @@ router.post('/budgets/apply-recommendations', async (req, res) => {
     }
 
     if (mongoose.connection.readyState !== 1) {
-      await jsonDb.applyBulkBudgets(recommendations);
+      await jsonDb.applyBulkBudgets(req.userId, recommendations);
     } else {
       // MongoDB Bulk Write Upsert
       const operations = recommendations.map(b => ({
         updateOne: {
-          filter: { category: b.category, month: b.month },
-          update: { limit: b.limit },
+          filter: ownedQuery(req, { category: b.category, month: b.month }),
+          update: { $set: { limit: b.limit, userId: req.userId } },
           upsert: true
         }
       }));
@@ -562,9 +549,9 @@ router.get('/subscriptions/detect', async (req, res) => {
   try {
     let transactions;
     if (mongoose.connection.readyState !== 1) {
-      transactions = await jsonDb.getTransactions({});
+      transactions = await jsonDb.getTransactions(req.userId, {});
     } else {
-      transactions = await Transaction.find();
+      transactions = await Transaction.find(ownedQuery(req));
     }
 
     const candidates = detectRecurringPayments(transactions);
@@ -572,9 +559,9 @@ router.get('/subscriptions/detect', async (req, res) => {
     // Filter out candidates already tracked as active subscriptions
     let activeSubs = [];
     if (mongoose.connection.readyState !== 1) {
-      activeSubs = await jsonDb.getSubscriptions();
+      activeSubs = await jsonDb.getSubscriptions(req.userId);
     } else {
-      activeSubs = await Subscription.find();
+      activeSubs = await Subscription.find(ownedQuery(req));
     }
 
     const filteredCandidates = candidates.filter((c) =>
@@ -602,9 +589,9 @@ router.post('/subscriptions/confirm', async (req, res) => {
     const results = [];
     for (const s of subscriptions) {
       if (mongoose.connection.readyState !== 1) {
-        results.push(await jsonDb.createSubscription(s));
+        results.push(await jsonDb.createSubscription(req.userId, ownedUpdates(s)));
       } else {
-        const sub = new Subscription(s);
+        const sub = new Subscription({ ...ownedUpdates(s), userId: req.userId });
         await sub.save();
         results.push(sub);
       }
@@ -620,7 +607,7 @@ router.post('/subscriptions/confirm', async (req, res) => {
 router.post('/subscriptions/run-scheduler', async (req, res) => {
   try {
     const jsonDbMode = mongoose.connection.readyState !== 1;
-    const result = await checkAndLogDueSubscriptions(jsonDbMode);
+    const result = await checkAndLogDueSubscriptions(jsonDbMode, req.userId);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -631,10 +618,10 @@ router.post('/subscriptions/run-scheduler', async (req, res) => {
 router.get('/subscriptions', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      const subs = await jsonDb.getSubscriptions();
+      const subs = await jsonDb.getSubscriptions(req.userId);
       return res.json(subs);
     }
-    const subs = await Subscription.find();
+    const subs = await Subscription.find(ownedQuery(req));
     res.json(subs);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -646,20 +633,25 @@ router.post('/subscriptions', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
       if (req.body._id) {
-        const updated = await jsonDb.updateSubscription(req.body._id, req.body);
+        const updated = await jsonDb.updateSubscription(req.userId, req.body._id, ownedUpdates(req.body));
         if (!updated) return res.status(404).json({ error: 'Subscription not found' });
         return res.json(updated);
       }
-      const sub = await jsonDb.createSubscription(req.body);
+      const sub = await jsonDb.createSubscription(req.userId, ownedUpdates(req.body));
       return res.status(201).json(sub);
     }
     const { _id, description, amount, category, merchant, billingCycle, nextDueDate, status, paymentMethod, isEMI, tenureMonths, remainingMonths } = req.body;
 
     let sub;
     if (_id) {
-      sub = await Subscription.findByIdAndUpdate(_id, req.body, { new: true, runValidators: true });
+      sub = await Subscription.findOneAndUpdate(
+        ownedQuery(req, { _id }),
+        ownedUpdates(req.body),
+        { new: true, runValidators: true }
+      );
     } else {
       sub = new Subscription({
+        userId: req.userId,
         description,
         amount,
         category: category || 'Other',
@@ -685,11 +677,11 @@ router.post('/subscriptions', async (req, res) => {
 router.delete('/subscriptions/:id', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      const result = await jsonDb.deleteSubscription(req.params.id);
+      const result = await jsonDb.deleteSubscription(req.userId, req.params.id);
       if (!result) return res.status(404).json({ error: 'Subscription not found' });
       return res.json({ message: 'Subscription deleted successfully' });
     }
-    const sub = await Subscription.findByIdAndDelete(req.params.id);
+    const sub = await Subscription.findOneAndDelete(ownedQuery(req, { _id: req.params.id }));
     if (!sub) return res.status(404).json({ error: 'Subscription not found' });
     res.json({ message: 'Subscription deleted successfully' });
   } catch (error) {
@@ -704,10 +696,10 @@ router.delete('/subscriptions/:id', async (req, res) => {
 router.get('/goals', async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
-      const goals = await jsonDb.getGoals();
+      const goals = await jsonDb.getGoals(req.userId);
       return res.json(goals);
     }
-    const goals = await Goal.find().sort({ createdAt: -1 });
+    const goals = await Goal.find(ownedQuery(req)).sort({ createdAt: -1 });
     res.json(goals);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -736,11 +728,11 @@ router.post('/goals', async (req, res) => {
     };
 
     if (mongoose.connection.readyState !== 1) {
-      const goal = await jsonDb.createGoal(payload);
+      const goal = await jsonDb.createGoal(req.userId, payload);
       return res.status(201).json(goal);
     }
 
-    const goal = await Goal.create(payload);
+    const goal = await Goal.create({ ...payload, userId: req.userId });
     res.status(201).json(goal);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -751,7 +743,7 @@ router.post('/goals', async (req, res) => {
 router.put('/goals/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = { ...req.body };
+    const updates = ownedUpdates(req.body);
 
     if (updates.targetAmount) updates.targetAmount = Number(updates.targetAmount);
     if (updates.currentAmount !== undefined) updates.currentAmount = Number(updates.currentAmount);
@@ -762,12 +754,12 @@ router.put('/goals/:id', async (req, res) => {
     }
 
     if (mongoose.connection.readyState !== 1) {
-      const updated = await jsonDb.updateGoal(id, updates);
+      const updated = await jsonDb.updateGoal(req.userId, id, updates);
       if (!updated) return res.status(404).json({ error: 'Goal not found' });
       return res.json(updated);
     }
 
-    const goal = await Goal.findById(id);
+    const goal = await Goal.findOne(ownedQuery(req, { _id: id }));
     if (!goal) return res.status(404).json({ error: 'Goal not found' });
 
     Object.assign(goal, updates);
@@ -793,15 +785,15 @@ router.post('/goals/:id/contribute', async (req, res) => {
     const addVal = Number(amount);
 
     if (mongoose.connection.readyState !== 1) {
-      const goals = await jsonDb.getGoals();
+      const goals = await jsonDb.getGoals(req.userId);
       const target = goals.find(g => g._id === id);
       if (!target) return res.status(404).json({ error: 'Goal not found' });
       const newAmount = (target.currentAmount || 0) + addVal;
-      const updated = await jsonDb.updateGoal(id, { currentAmount: newAmount });
+      const updated = await jsonDb.updateGoal(req.userId, id, { currentAmount: newAmount });
       return res.json(updated);
     }
 
-    const goal = await Goal.findById(id);
+    const goal = await Goal.findOne(ownedQuery(req, { _id: id }));
     if (!goal) return res.status(404).json({ error: 'Goal not found' });
 
     goal.currentAmount += addVal;
@@ -820,12 +812,12 @@ router.delete('/goals/:id', async (req, res) => {
   try {
     const { id } = req.params;
     if (mongoose.connection.readyState !== 1) {
-      const result = await jsonDb.deleteGoal(id);
+      const result = await jsonDb.deleteGoal(req.userId, id);
       if (!result) return res.status(404).json({ error: 'Goal not found' });
       return res.json({ message: 'Goal deleted successfully' });
     }
 
-    const goal = await Goal.findByIdAndDelete(id);
+    const goal = await Goal.findOneAndDelete(ownedQuery(req, { _id: id }));
     if (!goal) return res.status(404).json({ error: 'Goal not found' });
     res.json({ message: 'Goal deleted successfully' });
   } catch (error) {

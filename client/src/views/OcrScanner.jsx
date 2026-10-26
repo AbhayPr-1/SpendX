@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { UploadCloud, CheckCircle, Loader2, Sparkles, Tag, AlertCircle, ArrowRight } from 'lucide-react';
+import { EXPENSE_CATEGORIES } from '../utils/categories';
 
 export default function OcrScanner() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -423,15 +424,7 @@ export default function OcrScanner() {
                 <div className="form-group">
                   <label>Category</label>
                   <select name="category" value={form.category} onChange={handleInputChange} disabled={scanning}>
-                    <option value="Food & Dining">Food & Dining</option>
-                    <option value="Transport & Auto">Transport & Auto</option>
-                    <option value="Utilities & Bills">Utilities & Bills</option>
-                    <option value="Shopping">Shopping</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Healthcare & Fitness">Healthcare & Fitness</option>
-                    <option value="Education">Education</option>
-                    <option value="Travel">Travel</option>
-                    <option value="Miscellaneous">Miscellaneous</option>
+                    {EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
                   </select>
                 </div>
                 <div className="form-group">

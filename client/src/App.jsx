@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import Sidebar from './components/Sidebar';
@@ -118,15 +118,15 @@ export default function App() {
 
             <div className="content-body">
               <Routes>
-                <Route path="/"              element={<Dashboard     user={user} />} />
-                <Route path="/transactions"  element={<Transactions  user={user} />} />
-                <Route path="/budgets"       element={<Budgets       user={user} />} />
-                <Route path="/goals"         element={<Goals         user={user} />} />
-                <Route path="/subscriptions" element={<Subscriptions user={user} />} />
-                <Route path="/forecast"      element={<Forecast      user={user} />} />
-                <Route path="/advisor"       element={<AiAdvisor     user={user} />} />
-                <Route path="/ocr"           element={<OcrScanner    user={user} />} />
-                <Route path="/preferences"   element={<Preferences   user={user} darkMode={darkMode} onToggleDark={toggleDarkMode} />} />
+                <Route path="/"              element={<Dashboard />} />
+                <Route path="/transactions"  element={<Transactions />} />
+                <Route path="/budgets"       element={<Budgets />} />
+                <Route path="/goals"         element={<Goals />} />
+                <Route path="/subscriptions" element={<Subscriptions />} />
+                <Route path="/forecast"      element={<Forecast />} />
+                <Route path="/advisor"       element={<AiAdvisor />} />
+                <Route path="/ocr"           element={<OcrScanner />} />
+                <Route path="/preferences"   element={<Preferences darkMode={darkMode} onToggleDark={toggleDarkMode} />} />
                 <Route path="/account"       element={<Account       user={user} onSignOut={handleSignOut} />} />
                 <Route path="*"              element={<Navigate to="/" replace />} />
               </Routes>

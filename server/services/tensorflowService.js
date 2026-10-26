@@ -93,12 +93,12 @@ async function loadTensorFlow() {
     const tfNode = await import('@tensorflow/tfjs-node');
     tfInstance = tfNode.default || tfNode;
     return tfInstance;
-  } catch (_error) {
+  } catch {
     try {
       const tfBrowser = await import('@tensorflow/tfjs');
       tfInstance = tfBrowser.default || tfBrowser;
       return tfInstance;
-    } catch (error) {
+    } catch {
       tfInstance = null;
       return null;
     }
@@ -149,7 +149,7 @@ async function ensureTensorflowModel() {
       ]);
 
       return model;
-    } catch (_error) {
+    } catch {
       return null;
     }
   })();
@@ -190,7 +190,7 @@ export async function predictExpenseCategoryTensorFlow(description) {
       category,
       confidence: Number.isFinite(confidence) ? confidence : fallback.confidence,
     };
-  } catch (_error) {
+  } catch {
     return fallback;
   }
 }

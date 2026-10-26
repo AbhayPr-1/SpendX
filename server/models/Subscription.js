@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 
 const SubscriptionSchema = new mongoose.Schema({
+  userId: {
+    type: String,
+    required: true,
+    index: true
+  },
   description: {
     type: String,
     required: true,

@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Filter, Calendar, Edit2, Trash2, Plus, Sparkles, ArrowUpDown, Receipt } from 'lucide-react';
+import { getBadgeClass } from '../utils/categoryStyles';
+import { EXPENSE_CATEGORIES } from '../utils/categories';
 
 export default function Transactions() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -202,19 +204,6 @@ export default function Transactions() {
     setSelectedTx(null);
   };
 
-  const getBadgeClass = (catName) => {
-    const cat = (catName || '').toLowerCase();
-    if (cat.includes('food')) return 'badge-food';
-    if (cat.includes('transport') || cat.includes('auto')) return 'badge-transport';
-    if (cat.includes('utility') || cat.includes('bill')) return 'badge-utilities';
-    if (cat.includes('shopping')) return 'badge-shopping';
-    if (cat.includes('entertainment')) return 'badge-entertainment';
-    if (cat.includes('health') || cat.includes('fitness')) return 'badge-healthcare';
-    if (cat.includes('education')) return 'badge-education';
-    if (cat.includes('travel')) return 'badge-travel';
-    return 'badge-misc';
-  };
-
   return (
     <div>
       <div className="view-header">
@@ -244,15 +233,7 @@ export default function Transactions() {
           <Filter size={16} style={{ color: 'var(--text-muted)' }} />
           <select value={category} onChange={(e) => handleCategoryChange(e.target.value)} style={{ padding: '10px 14px' }}>
             <option value="">All Categories</option>
-            <option value="Food & Dining">Food & Dining</option>
-            <option value="Transport & Auto">Transport & Auto</option>
-            <option value="Utilities & Bills">Utilities & Bills</option>
-            <option value="Shopping">Shopping</option>
-            <option value="Entertainment">Entertainment</option>
-            <option value="Healthcare & Fitness">Healthcare & Fitness</option>
-            <option value="Education">Education</option>
-            <option value="Travel">Travel</option>
-            <option value="Miscellaneous">Miscellaneous</option>
+            {EXPENSE_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </div>
 
@@ -465,15 +446,7 @@ export default function Transactions() {
                   <label>Category (Optional)</label>
                   <select name="category" value={form.category} onChange={handleInputChange}>
                     <option value="">Auto-Detect (AI)</option>
-                    <option value="Food & Dining">Food & Dining</option>
-                    <option value="Transport & Auto">Transport & Auto</option>
-                    <option value="Utilities & Bills">Utilities & Bills</option>
-                    <option value="Shopping">Shopping</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Healthcare & Fitness">Healthcare & Fitness</option>
-                    <option value="Education">Education</option>
-                    <option value="Travel">Travel</option>
-                    <option value="Miscellaneous">Miscellaneous</option>
+                    {EXPENSE_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}
                   </select>
                 </div>
               </div>
@@ -569,15 +542,7 @@ export default function Transactions() {
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label>Category</label>
                   <select name="category" value={form.category} onChange={handleInputChange}>
-                    <option value="Food & Dining">Food & Dining</option>
-                    <option value="Transport & Auto">Transport & Auto</option>
-                    <option value="Utilities & Bills">Utilities & Bills</option>
-                    <option value="Shopping">Shopping</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Healthcare & Fitness">Healthcare & Fitness</option>
-                    <option value="Education">Education</option>
-                    <option value="Travel">Travel</option>
-                    <option value="Miscellaneous">Miscellaneous</option>
+                    {EXPENSE_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}
                   </select>
                 </div>
               </div>

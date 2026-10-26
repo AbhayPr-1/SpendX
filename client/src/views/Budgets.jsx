@@ -1,17 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Edit3, ShieldAlert } from 'lucide-react';
-
-const FRONTEND_CATEGORIES = [
-  'Food & Dining',
-  'Transport & Auto',
-  'Utilities & Bills',
-  'Shopping',
-  'Entertainment',
-  'Healthcare & Fitness',
-  'Education',
-  'Travel',
-  'Miscellaneous'
-];
+import { EXPENSE_CATEGORIES } from '../utils/categories';
 
 export default function Budgets() {
   const [budgets, setBudgets] = useState([]);
@@ -43,7 +32,7 @@ export default function Budgets() {
       }
 
       // Assemble final data structure merging limit and spent
-      const merged = FRONTEND_CATEGORIES.map(cat => {
+      const merged = EXPENSE_CATEGORIES.map(cat => {
         const budgetObj = budgetLimits.find(b => b.category === cat);
         const spentObj = categorySpent.find(s => s.category === cat);
         
