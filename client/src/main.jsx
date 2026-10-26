@@ -13,9 +13,9 @@ window.fetch = (input, init = {}) => {
   }
 
   const token = localStorage.getItem('spendx_token')
-  const isAuthRequest = url.includes('/api/auth/')
+  const isPublicAuthRequest = /\/api\/auth\/(login|register|validate-username|validate-email)$/.test(url)
 
-  if (!isAuthRequest && token) {
+  if (!isPublicAuthRequest && token) {
     const headers = new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined))
     headers.set('Authorization', `Bearer ${token}`)
     return originalFetch(url, { ...init, headers }).then((response) => {

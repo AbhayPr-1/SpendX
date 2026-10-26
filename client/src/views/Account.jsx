@@ -1,5 +1,3 @@
-import React from 'react';
-
 export default function Account({ user, onSignOut }) {
   return (
     <div className="content-body">

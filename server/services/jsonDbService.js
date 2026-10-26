@@ -6,272 +6,38 @@ import { autoCategorize } from './aiService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
-const defaultDbFilePath = path.join(__dirname, '../data/db.json');
-const dbFilePath = isServerless ? path.join(os.tmpdir(), 'spendx_db.json') : defaultDbFilePath;
+const dbFilePath = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+  ? path.join(os.tmpdir(), 'spendx_db.json')
+  : path.join(__dirname, '../data/db.json');
 
 let memoryDbCache = null;
 
-/**
- * Dynamic Mock Data Generator for 12 months track record
- */
-export function generateYearlyMockData() {
-  const transactions = [];
-  const budgets = [];
-  const now = new Date();
-  
-  // Generate data for the last 12 months (inclusive of current month)
-  for (let m = 11; m >= 0; m--) {
-    const targetDate = new Date(now.getFullYear(), now.getMonth() - m, 15);
-    const year = targetDate.getFullYear();
-    const monthIndex = targetDate.getMonth();
-    const monthStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-
-    // Seed Standard Budgets for each of the 12 months
-    budgets.push(
-      { category: 'Food & Dining', limit: 15000, month: monthStr },
-      { category: 'Transport & Auto', limit: 5000, month: monthStr },
-      { category: 'Utilities & Bills', limit: 25000, month: monthStr },
-      { category: 'Shopping', limit: 12000, month: monthStr },
-      { category: 'Entertainment', limit: 4000, month: monthStr },
-      { category: 'Healthcare & Fitness', limit: 8000, month: monthStr },
-      { category: 'Education', limit: 3000, month: monthStr },
-      { category: 'Travel', limit: 15000, month: monthStr }
-    );
-
-    // 1. Rent (1st of month)
-    transactions.push({
-      description: 'Monthly Apartment Rent',
-      amount: 15000,
-      category: 'Utilities & Bills',
-      date: new Date(year, monthIndex, 1, 10, 0, 0).toISOString(),
-      paymentMethod: 'NetBanking',
-      merchant: 'Landlord Account',
-      tags: ['rent', 'fixed'],
-      notes: `Rent payment for ${monthStr}`
-    });
-
-    // 2. Broadband WiFi (5th of month)
-    transactions.push({
-      description: 'Airtel Broadband Fiber',
-      amount: 999,
-      category: 'Utilities & Bills',
-      date: new Date(year, monthIndex, 5, 11, 30, 0).toISOString(),
-      paymentMethod: 'NetBanking',
-      merchant: 'Airtel Fiber',
-      tags: ['internet', 'utility']
-    });
-
-    // 3. Electricity (10th of month)
-    const elecBill = Math.round(1800 + Math.random() * 1200);
-    transactions.push({
-      description: 'BESCOM Electricity Bill',
-      amount: elecBill,
-      category: 'Utilities & Bills',
-      date: new Date(year, monthIndex, 10, 14, 0, 0).toISOString(),
-      paymentMethod: 'UPI',
-      merchant: 'BESCOM India',
-      tags: ['electricity', 'utility']
-    });
-
-    // 4. Netflix Subscription (15th of month)
-    transactions.push({
-      description: 'Netflix Premium Plan',
-      amount: 649,
-      category: 'Entertainment',
-      date: new Date(year, monthIndex, 15, 8, 0, 0).toISOString(),
-      paymentMethod: 'Card',
-      merchant: 'Netflix Inc',
-      tags: ['subscription', 'entertainment']
-    });
-
-    // 5. Spotify Premium (18th of month)
-    transactions.push({
-      description: 'Spotify Premium Duo Plan',
-      amount: 179,
-      category: 'Entertainment',
-      date: new Date(year, monthIndex, 18, 9, 15, 0).toISOString(),
-      paymentMethod: 'UPI',
-      merchant: 'Spotify Music',
-      tags: ['subscription', 'music']
-    });
-
-    // Weekly Groceries (4 times per month)
-    const groceryMerchants = ['BigBasket', 'Reliance Smart', 'Zepto Delivery', 'Instamart'];
-    for (let w = 1; w <= 4; w++) {
-      const day = w * 7 - Math.floor(Math.random() * 3);
-      // Don't generate dates in future for the current month
-      if (m === 0 && day > now.getDate()) continue;
-      
-      const amt = Math.round(800 + Math.random() * 1400);
-      transactions.push({
-        description: 'Weekly Grocery Purchase',
-        amount: amt,
-        category: 'Food & Dining',
-        date: new Date(year, monthIndex, day, 12, 0, 0).toISOString(),
-        paymentMethod: 'UPI',
-        merchant: groceryMerchants[w - 1],
-        tags: ['groceries', 'household']
-      });
-    }
-
-    // Swiggy / Resto Dining (5 orders per month)
-    const restoMerchants = ['Meghana Foods', 'Empire Restaurant', 'Leon Grill', 'Corner House Icecreams', 'EatFit Meal'];
-    for (let f = 0; f < 5; f++) {
-      const day = Math.floor(1 + Math.random() * 28);
-      if (m === 0 && day > now.getDate()) continue;
-
-      const amt = Math.round(350 + Math.random() * 700);
-      transactions.push({
-        description: 'Food Delivery Order',
-        amount: amt,
-        category: 'Food & Dining',
-        date: new Date(year, monthIndex, day, 20, 30, 0).toISOString(),
-        paymentMethod: 'UPI',
-        merchant: restoMerchants[f % restoMerchants.length],
-        tags: ['food', 'dining']
-      });
-    }
-
-    // Cab / Auto Commutes (6 trips per month)
-    for (let t = 0; t < 6; t++) {
-      const day = Math.floor(1 + Math.random() * 28);
-      if (m === 0 && day > now.getDate()) continue;
-
-      const amt = Math.round(150 + Math.random() * 350);
-      transactions.push({
-        description: 'Office Commute Ride',
-        amount: amt,
-        category: 'Transport & Auto',
-        date: new Date(year, monthIndex, day, 9, 0, 0).toISOString(),
-        paymentMethod: 'UPI',
-        merchant: Math.random() > 0.5 ? 'Uber India' : 'Ola Cabs',
-        tags: ['commute', 'cab']
-      });
-    }
-
-    // Amazon / Myntra Shopping (1-2 orders per month)
-    const shoppingCount = Math.random() > 0.5 ? 2 : 1;
-    for (let s = 0; s < shoppingCount; s++) {
-      const day = Math.floor(1 + Math.random() * 28);
-      if (m === 0 && day > now.getDate()) continue;
-
-      const amt = Math.round(800 + Math.random() * 3500);
-      transactions.push({
-        description: 'Online Shopping Purchase',
-        amount: amt,
-        category: 'Shopping',
-        date: new Date(year, monthIndex, day, 16, 45, 0).toISOString(),
-        paymentMethod: 'UPI',
-        merchant: Math.random() > 0.4 ? 'Amazon Retail' : 'Myntra Fashion',
-        tags: ['shopping', 'apparel']
-      });
-    }
-
-    // Gym / Medical (every other month)
-    if (monthIndex % 2 === 0) {
-      const day = Math.floor(1 + Math.random() * 28);
-      if (!(m === 0 && day > now.getDate())) {
-        const amt = Math.round(400 + Math.random() * 1100);
-        transactions.push({
-          description: 'Medicine Purchase',
-          amount: amt,
-          category: 'Healthcare & Fitness',
-          date: new Date(year, monthIndex, day, 18, 0, 0).toISOString(),
-          paymentMethod: 'Cash',
-          merchant: 'Apollo Pharmacy',
-          tags: ['medical', 'health']
-        });
-      }
-
-      const eduDay = Math.floor(1 + Math.random() * 28);
-      if (!(m === 0 && eduDay > now.getDate())) {
-        const amt = Math.round(389 + Math.random() * 400);
-        transactions.push({
-          description: 'Technical Skill Course',
-          amount: amt,
-          category: 'Education',
-          date: new Date(year, monthIndex, eduDay, 21, 0, 0).toISOString(),
-          paymentMethod: 'UPI',
-          merchant: 'Udemy Web Development',
-          tags: ['course', 'learning']
-        });
-      }
-    }
-
-    // Travel (once every 3 months)
-    if (monthIndex % 3 === 0) {
-      const day = Math.floor(10 + Math.random() * 15);
-      if (!(m === 0 && day > now.getDate())) {
-        const amt = Math.round(5500 + Math.random() * 6500);
-        transactions.push({
-          description: 'Weekend Getaway Outing',
-          amount: amt,
-          category: 'Travel',
-          date: new Date(year, monthIndex, day, 7, 0, 0).toISOString(),
-          paymentMethod: 'Card',
-          merchant: 'MakeMyTrip Hotels',
-          tags: ['travel', 'holiday']
-        });
-      }
-    }
-  }
-
-  // Sort transactions by date descending so the newest are at the top
-  const sortedTransactions = transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-  const mockSubscriptions = [
-    {
-      _id: 'mock-sub-1',
-      description: 'Netflix Premium Plan',
-      amount: 649,
-      category: 'Entertainment',
-      merchant: 'Netflix Inc',
-      billingCycle: 'monthly',
-      nextDueDate: new Date(now.getFullYear(), now.getMonth(), 15).toISOString(),
-      status: 'active',
-      paymentMethod: 'Card'
-    },
-    {
-      _id: 'mock-sub-2',
-      description: 'Spotify Premium Duo Plan',
-      amount: 179,
-      category: 'Entertainment',
-      merchant: 'Spotify Music',
-      billingCycle: 'monthly',
-      nextDueDate: new Date(now.getFullYear(), now.getMonth(), 18).toISOString(),
-      status: 'active',
-      paymentMethod: 'UPI'
-    },
-    {
-      _id: 'mock-sub-3',
-      description: 'Airtel Broadband Fiber',
-      amount: 999,
-      category: 'Utilities & Bills',
-      merchant: 'Airtel Fiber',
-      billingCycle: 'monthly',
-      nextDueDate: new Date(now.getFullYear(), now.getMonth(), 5).toISOString(),
-      status: 'active',
-      paymentMethod: 'NetBanking'
-    },
-    {
-      _id: 'mock-sub-4',
-      description: 'Monthly Apartment Rent',
-      amount: 15000,
-      category: 'Utilities & Bills',
-      merchant: 'Landlord Account',
-      billingCycle: 'monthly',
-      nextDueDate: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString(),
-      status: 'active',
-      paymentMethod: 'NetBanking'
-    }
-  ];
-
+function emptyDbData() {
   return {
-    transactions: sortedTransactions.map((t, idx) => ({ ...t, _id: `mock-tx-${idx + 1}` })),
-    budgets: budgets.map((b, idx) => ({ ...b, _id: `mock-b-${idx + 1}` })),
-    subscriptions: mockSubscriptions
+    transactions: [],
+    budgets: [],
+    subscriptions: [],
+    goals: [],
+    users: []
   };
+}
+
+function normalizeDbData(data = {}) {
+  return {
+    ...data,
+    transactions: Array.isArray(data.transactions) ? data.transactions : [],
+    budgets: Array.isArray(data.budgets) ? data.budgets : [],
+    subscriptions: Array.isArray(data.subscriptions) ? data.subscriptions : [],
+    goals: Array.isArray(data.goals) ? data.goals : [],
+    users: Array.isArray(data.users) ? data.users : []
+  };
+}
+
+function requireUserId(userId) {
+  if (typeof userId !== 'string' || userId.length === 0) {
+    throw new Error('Authenticated user is required for personal data access');
+  }
+  return userId;
 }
 
 /**
@@ -289,25 +55,15 @@ function initDb() {
     }
   }
 
-  if (!fs.existsSync(dbFilePath)) {
-    // If in serverless and root seed db exists, copy it
-    if (isServerless && fs.existsSync(defaultDbFilePath)) {
-      try {
-        fs.copyFileSync(defaultDbFilePath, dbFilePath);
-        return;
-      } catch (e) {
-        console.warn('Notice: Could not copy seed db, generating in-memory:', e.message);
-      }
-    }
+  if (fs.existsSync(dbFilePath)) return;
 
-    try {
-      const data = generateYearlyMockData();
-      fs.writeFileSync(dbFilePath, JSON.stringify(data, null, 2), 'utf-8');
-      memoryDbCache = data;
-    } catch (err) {
-      console.warn('Notice: Disk write unavailable, using in-memory cache:', err.message);
-      memoryDbCache = generateYearlyMockData();
-    }
+  try {
+    const data = emptyDbData();
+    fs.writeFileSync(dbFilePath, JSON.stringify(data, null, 2), 'utf-8');
+    memoryDbCache = data;
+  } catch (error) {
+    console.warn('JSON DB Service: Using empty in-memory database (disk write unavailable):', error.message);
+    memoryDbCache = emptyDbData();
   }
 }
 
@@ -320,22 +76,14 @@ export function readRawData() {
   try {
     if (fs.existsSync(dbFilePath)) {
       const raw = fs.readFileSync(dbFilePath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (!parsed.subscriptions) parsed.subscriptions = [];
-      memoryDbCache = parsed;
-      return parsed;
-    }
-    if (fs.existsSync(defaultDbFilePath)) {
-      const raw = fs.readFileSync(defaultDbFilePath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (!parsed.subscriptions) parsed.subscriptions = [];
+      const parsed = normalizeDbData(JSON.parse(raw));
       memoryDbCache = parsed;
       return parsed;
     }
   } catch (error) {
-    console.error('JSON DB Service: Failed to read local db.json, returning in-memory structure.', error.message);
+    console.error('JSON DB Service: Failed to read local db.json; using an empty in-memory database.', error.message);
   }
-  if (!memoryDbCache) memoryDbCache = generateYearlyMockData();
+  if (!memoryDbCache) memoryDbCache = emptyDbData();
   return memoryDbCache;
 }
 
@@ -352,24 +100,11 @@ export function writeRawData(data) {
 }
 
 export const jsonDb = {
-  // Clear database and re-seed (helper if needed)
-  clearAndReSeed: () => {
-    try {
-      if (fs.existsSync(dbFilePath)) {
-        fs.unlinkSync(dbFilePath);
-      }
-      initDb();
-      return true;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
-  },
-
-  getTransactions: async (filters = {}) => {
+  getTransactions: async (userId, filters = {}) => {
+    const ownerId = requireUserId(userId);
     const { category, search, month, sortBy } = filters;
     const data = readRawData();
-    let list = [...data.transactions];
+    let list = data.transactions.filter((transaction) => transaction.userId === ownerId);
 
     if (category) {
       list = list.filter(t => t.category === category);
@@ -388,21 +123,18 @@ export const jsonDb = {
       list = list.filter(t => t.date && t.date.slice(0, 7) === month);
     }
 
-    if (sortBy === 'createdAt') {
-      return list.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
-    } else if (sortBy === 'dateAsc') {
-      return list.sort((a, b) => new Date(a.date) - new Date(b.date));
-    } else if (sortBy === 'amountDesc') {
-      return list.sort((a, b) => b.amount - a.amount);
-    } else if (sortBy === 'amountAsc') {
-      return list.sort((a, b) => a.amount - b.amount);
-    }
-
-    // Default sort by date desc
-    return list.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sortComparators = {
+      createdAt: (a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date),
+      dateAsc: (a, b) => new Date(a.date) - new Date(b.date),
+      amountDesc: (a, b) => b.amount - a.amount,
+      amountAsc: (a, b) => a.amount - b.amount
+    };
+    const compare = sortComparators[sortBy] || ((a, b) => new Date(b.date) - new Date(a.date));
+    return list.sort(compare);
   },
 
-  createTransaction: async (txData) => {
+  createTransaction: async (userId, txData) => {
+    const ownerId = requireUserId(userId);
     const { description, amount, date, paymentMethod, merchant, tags, notes, category, receiptUrl } = txData;
     const data = readRawData();
 
@@ -423,6 +155,7 @@ export const jsonDb = {
 
     const newTx = {
       _id: 'mock-tx-' + Date.now(),
+      userId: ownerId,
       description,
       amount: parseFloat(amount),
       date: date || new Date().toISOString(),
@@ -442,15 +175,18 @@ export const jsonDb = {
     return newTx;
   },
 
-  updateTransaction: async (id, updates) => {
+  updateTransaction: async (userId, id, updates) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
-    const idx = data.transactions.findIndex(t => t._id === id);
+    const idx = data.transactions.findIndex(t => t._id === id && t.userId === ownerId);
     if (idx === -1) return null;
 
     const original = data.transactions[idx];
     const updated = {
       ...original,
       ...updates,
+      _id: original._id,
+      userId: ownerId,
       amount: updates.amount ? parseFloat(updates.amount) : original.amount,
       updatedAt: new Date().toISOString()
     };
@@ -460,9 +196,10 @@ export const jsonDb = {
     return updated;
   },
 
-  deleteTransaction: async (id) => {
+  deleteTransaction: async (userId, id) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
-    const idx = data.transactions.findIndex(t => t._id === id);
+    const idx = data.transactions.findIndex(t => t._id === id && t.userId === ownerId);
     if (idx === -1) return null;
 
     data.transactions.splice(idx, 1);
@@ -470,16 +207,18 @@ export const jsonDb = {
     return { success: true };
   },
 
-  getBudgets: async (month) => {
+  getBudgets: async (userId, month) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
-    return data.budgets.filter(b => b.month === month);
+    return data.budgets.filter(b => b.userId === ownerId && b.month === month);
   },
 
-  updateBudget: async (budgetData) => {
+  updateBudget: async (userId, budgetData) => {
+    const ownerId = requireUserId(userId);
     const { category, limit, month } = budgetData;
     const data = readRawData();
     
-    const idx = data.budgets.findIndex(b => b.category === category && b.month === month);
+    const idx = data.budgets.findIndex(b => b.userId === ownerId && b.category === category && b.month === month);
     const limitNum = parseFloat(limit);
 
     let updatedBudget;
@@ -489,6 +228,7 @@ export const jsonDb = {
     } else {
       updatedBudget = {
         _id: 'mock-b-' + Date.now(),
+        userId: ownerId,
         category,
         limit: limitNum,
         month,
@@ -502,14 +242,15 @@ export const jsonDb = {
     return updatedBudget;
   },
 
-  getDashboardStats: async (month) => {
+  getDashboardStats: async (userId, month) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
     
     // Filter transactions for this month
-    const thisMonthTransactions = data.transactions.filter(t => t.date && t.date.slice(0, 7) === month);
+    const thisMonthTransactions = data.transactions.filter(t => t.userId === ownerId && t.date && t.date.slice(0, 7) === month);
     
     // Filter budgets for this month
-    const thisMonthBudgets = data.budgets.filter(b => b.month === month);
+    const thisMonthBudgets = data.budgets.filter(b => b.userId === ownerId && b.month === month);
 
     let totalSpent = 0;
     const spendingByCategory = {};
@@ -543,8 +284,7 @@ export const jsonDb = {
     });
 
     // Sort transactions by date desc and limit to 5
-    const recent = [...data.transactions]
-      .filter((transaction) => transaction.date && transaction.date.slice(0, 7) === month)
+    const recent = [...thisMonthTransactions]
       .sort((a, b) => new Date(b.date) - new Date(a.date))
       .slice(0, 5);
 
@@ -556,7 +296,8 @@ export const jsonDb = {
     };
   },
 
-  getHistoryStats: async () => {
+  getHistoryStats: async (userId) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
     const now = new Date();
     const history = [];
@@ -569,11 +310,11 @@ export const jsonDb = {
       const monthStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
 
       // Sum spent
-      const monthTxs = data.transactions.filter(t => t.date && t.date.slice(0, 7) === monthStr);
+      const monthTxs = data.transactions.filter(t => t.userId === ownerId && t.date && t.date.slice(0, 7) === monthStr);
       const spent = monthTxs.reduce((sum, t) => sum + t.amount, 0);
 
       // Sum budget limits
-      const monthBudgets = data.budgets.filter(b => b.month === monthStr);
+      const monthBudgets = data.budgets.filter(b => b.userId === ownerId && b.month === monthStr);
       const budgetLimit = monthBudgets.reduce((sum, b) => sum + b.limit, 0);
 
       // Get month label (e.g. "Jul 25")
@@ -590,15 +331,17 @@ export const jsonDb = {
     return history;
   },
 
-  getAllBudgets: async () => {
+  getAllBudgets: async (userId) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
-    return data.budgets;
+    return data.budgets.filter((budget) => budget.userId === ownerId);
   },
 
-  applyBulkBudgets: async (budgetsList) => {
+  applyBulkBudgets: async (userId, budgetsList) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
     budgetsList.forEach(b => {
-      const idx = data.budgets.findIndex(x => x.category === b.category && x.month === b.month);
+      const idx = data.budgets.findIndex(x => x.userId === ownerId && x.category === b.category && x.month === b.month);
       const limitNum = parseFloat(b.limit);
       if (idx !== -1) {
         data.budgets[idx].limit = limitNum;
@@ -606,6 +349,7 @@ export const jsonDb = {
       } else {
         data.budgets.push({
           _id: 'mock-b-' + (Date.now() + Math.random()),
+          userId: ownerId,
           category: b.category,
           limit: limitNum,
           month: b.month,
@@ -618,17 +362,25 @@ export const jsonDb = {
     return { success: true };
   },
 
-  getSubscriptions: async () => {
+  getSubscriptions: async (userId) => {
+    const ownerId = requireUserId(userId);
+    const data = readRawData();
+    return (data.subscriptions || []).filter((subscription) => subscription.userId === ownerId);
+  },
+
+  getAllSubscriptionsForScheduler: async () => {
     const data = readRawData();
     return data.subscriptions || [];
   },
 
-  createSubscription: async (subData) => {
+  createSubscription: async (userId, subData) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
     const newSub = {
-      _id: 'mock-sub-' + (Date.now() + Math.random()),
       status: 'active',
       ...subData,
+      _id: 'mock-sub-' + (Date.now() + Math.random()),
+      userId: ownerId,
       amount: parseFloat(subData.amount),
       isEMI: subData.isEMI === true || subData.isEMI === 'true',
       tenureMonths: subData.tenureMonths ? parseInt(subData.tenureMonths) : null,
@@ -642,15 +394,18 @@ export const jsonDb = {
     return newSub;
   },
 
-  updateSubscription: async (id, updates) => {
+  updateSubscription: async (userId, id, updates) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
     if (!data.subscriptions) data.subscriptions = [];
-    const idx = data.subscriptions.findIndex(s => s._id === id);
+    const idx = data.subscriptions.findIndex(s => s._id === id && s.userId === ownerId);
     if (idx === -1) return null;
     const original = data.subscriptions[idx];
     const updated = {
       ...original,
       ...updates,
+      _id: original._id,
+      userId: ownerId,
       amount: updates.amount ? parseFloat(updates.amount) : original.amount,
       isEMI: updates.isEMI !== undefined ? (updates.isEMI === true || updates.isEMI === 'true') : original.isEMI,
       tenureMonths: updates.tenureMonths !== undefined ? (updates.tenureMonths ? parseInt(updates.tenureMonths) : null) : original.tenureMonths,
@@ -662,10 +417,11 @@ export const jsonDb = {
     return updated;
   },
 
-  deleteSubscription: async (id) => {
+  deleteSubscription: async (userId, id) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
     if (!data.subscriptions) data.subscriptions = [];
-    const idx = data.subscriptions.findIndex(s => s._id === id);
+    const idx = data.subscriptions.findIndex(s => s._id === id && s.userId === ownerId);
     if (idx === -1) return null;
     data.subscriptions.splice(idx, 1);
     writeRawData(data);
@@ -673,18 +429,21 @@ export const jsonDb = {
   },
 
 
-  getGoals: async () => {
+  getGoals: async (userId) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
-    return data.goals || [];
+    return (data.goals || []).filter((goal) => goal.userId === ownerId);
   },
 
-  createGoal: async (goalData) => {
+  createGoal: async (userId, goalData) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
     const newGoal = {
       _id: 'mock-goal-' + (Date.now() + Math.random()),
       currentAmount: 0,
       isCompleted: false,
       ...goalData,
+      userId: ownerId,
       targetAmount: parseFloat(goalData.targetAmount),
       contributionAmount: parseFloat(goalData.contributionAmount || 0),
       createdAt: new Date().toISOString(),
@@ -696,15 +455,18 @@ export const jsonDb = {
     return newGoal;
   },
 
-  updateGoal: async (id, updates) => {
+  updateGoal: async (userId, id, updates) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
     if (!data.goals) data.goals = [];
-    const idx = data.goals.findIndex(g => g._id === id);
+    const idx = data.goals.findIndex(g => g._id === id && g.userId === ownerId);
     if (idx === -1) return null;
     const original = data.goals[idx];
     const updated = {
       ...original,
       ...updates,
+      _id: original._id,
+      userId: ownerId,
       targetAmount: updates.targetAmount !== undefined ? parseFloat(updates.targetAmount) : original.targetAmount,
       currentAmount: updates.currentAmount !== undefined ? parseFloat(updates.currentAmount) : original.currentAmount,
       contributionAmount: updates.contributionAmount !== undefined ? parseFloat(updates.contributionAmount) : original.contributionAmount,
@@ -718,18 +480,13 @@ export const jsonDb = {
     return updated;
   },
 
-  deleteGoal: async (id) => {
+  deleteGoal: async (userId, id) => {
+    const ownerId = requireUserId(userId);
     const data = readRawData();
     if (!data.goals) data.goals = [];
-    const idx = data.goals.findIndex(g => g._id === id);
+    const idx = data.goals.findIndex(g => g._id === id && g.userId === ownerId);
     if (idx === -1) return null;
     data.goals.splice(idx, 1);
-    writeRawData(data);
-    return { success: true };
-  },
-  bulkUpdateSubscriptions: async (subsList) => {
-    const data = readRawData();
-    data.subscriptions = subsList;
     writeRawData(data);
     return { success: true };
   }

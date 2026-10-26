@@ -1,6 +1,10 @@
 import mongoose from 'mongoose';
 
 const BudgetSchema = new mongoose.Schema({
+  userId: {
+    type: String,
+    required: true
+  },
   category: {
     type: String,
     required: true,
@@ -21,7 +25,7 @@ const BudgetSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Avoid duplicate budgets for the same category in the same month
-BudgetSchema.index({ category: 1, month: 1 }, { unique: true });
+// Avoid duplicate budgets per user, category, and month
+BudgetSchema.index({ userId: 1, category: 1, month: 1 }, { unique: true });
 
 export default mongoose.model('Budget', BudgetSchema);

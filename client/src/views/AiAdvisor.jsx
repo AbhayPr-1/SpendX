@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Send, Loader2, RefreshCw, Calendar } from 'lucide-react';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
 

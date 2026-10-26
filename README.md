@@ -9,15 +9,14 @@ Finance AI Expense Tracker is a full-stack personal-finance dashboard for record
 - Monthly budgets by spending category
 - Spending forecast based on transaction history
 - Subscription detection and recurring-payment tracking
-- Receipt scanner using Tesseract OCR for JPG, JPEG, and PNG images
+- Receipt scanner using Tesseract OCR and optional Gemini image parsing
 - Gemini-powered categorization, receipt parsing, forecasts, and financial-advisor responses
 - MongoDB persistence with a local JSON fallback when MongoDB is unavailable
-- Seed data for a new MongoDB database so the dashboard is immediately usable
 
 ## Technology
 
 - Frontend: React, Vite, React Router, Chart.js, Lucide React
-- Backend: Node.js, Express, Mongoose, Multer, Tesseract.js
+- Backend: Node.js, Express, Mongoose, Multer, Tesseract.js, TensorFlow.js
 - Database: MongoDB, with local JSON fallback
 - AI: Google Gemini API, optional
 
@@ -27,7 +26,7 @@ Install these before starting:
 
 - Node.js 20 or newer, with npm
 - Git
-- MongoDB 7 or newer, either running locally or a MongoDB Atlas connection string
+- MongoDB 7 or newer, either running locally or a MongoDB Atlas connection string (optional; the app falls back to a local JSON database)
 - A Gemini API key if you want AI features. The application still runs with local fallback logic without one.
 
 Check Node and npm:
@@ -57,7 +56,7 @@ From the project root, install the root, server, and client dependencies:
 npm run install:all
 ```
 
-This runs `npm install` in the root, `server`, and `client` directories. If you prefer to install them separately:
+This installs dependencies in the root, `server`, and `client` directories. If you prefer to install them separately:
 
 ```bash
 npm install
@@ -71,7 +70,7 @@ cd ..
 Create a file named `server/.env`. Do not commit this file or share its contents.
 
 ```env
-# Required: password used by the app sign-in screen
+# Optional: shared password for the single-owner local fallback account
 APP_PASSWORD=choose-a-password-at-least-8-characters-long
 
 # Required in production: long random value used to sign session tokens
@@ -87,13 +86,17 @@ GEMINI_API_KEY=your_gemini_api_key_here
 PORT=5001
 ```
 
-You can start from the included template:
+You can start from the included template. It is tracked by Git, so it must contain placeholders only—never put real passwords, tokens, or API keys in it. Replace the placeholder values in your local `server/.env` before starting, especially `AUTH_SECRET`:
 
 ```bash
 cp server/.env.example server/.env
 ```
 
-Change `APP_PASSWORD` and `AUTH_SECRET` before starting. The application is single-owner by design: the password protects one private workspace. Do not use a shared password for multiple people or expose this prototype directly to the public internet without adding a real multi-user identity system.
+On Windows Command Prompt, use `copy server\.env.example server\.env`.
+
+Change `AUTH_SECRET` before starting. Registered accounts have separate financial workspaces. `APP_PASSWORD` only provides a single shared local fallback account; it does not identify separate users, so only one trusted owner should use it. Use individual registered accounts for multi-user access, and do not expose this prototype directly to the public internet without adding a production-ready identity system.
+
+Records created by earlier versions may not have an owner assigned. They are intentionally excluded from account views rather than assigned to the first user who signs in. Back up and explicitly migrate those records to their verified owner before making them available again.
 
 ### Getting a Gemini API key
 
@@ -127,7 +130,7 @@ This starts both processes:
 
 Open the frontend URL in your browser. The Vite development server proxies `/api` requests to the backend, so the browser does not need a separate API URL configuration.
 
-The first screen asks for the `APP_PASSWORD` configured in `server/.env`. API requests use a signed bearer token, and uploaded receipts are served only through authenticated API requests.
+Sign in with a registered account or create one from the sign-in screen. The configured `APP_PASSWORD` is only for the single shared local fallback account. API requests use a signed bearer token, and uploaded receipts are served only through authenticated API requests.
 
 You can also run each process separately in two terminals:
 
@@ -143,9 +146,9 @@ Stop either process with `Ctrl+C`.
 
 ## First Run Behavior
 
-When MongoDB is connected and has no transactions, the server seeds approximately twelve months of sample transactions and budgets. This gives the dashboard data to display immediately.
+New workspaces start empty. The application does not generate or insert sample transactions, budgets, or subscriptions.
 
-When MongoDB is unavailable, the server uses its local JSON data service. Local database data and uploaded receipts are intentionally ignored by Git, so each developer has an independent local data set.
+When MongoDB is unavailable, the server uses its local JSON data service. Local database data and uploaded receipts are intentionally ignored by Git, so each developer has an independent local data set. The root `.gitignore` also excludes environment files (except the tracked `server/.env.example` template), dependency folders, build output, logs, and common editor/OS files.
 
 ## Using the App
 
@@ -157,7 +160,7 @@ When MongoDB is unavailable, the server uses its local JSON data service. Local 
 6. Use OCR Scanner to upload a receipt and review the extracted transaction before saving it.
 7. Use AI Advisor for monthly analysis and interactive questions when `GEMINI_API_KEY` is configured.
 
-Receipt uploads must be JPG, JPEG, or PNG files no larger than 5 MB.
+Receipt uploads are limited to 10 MB. The upload filter accepts image MIME types and common JPG, PNG, WebP, AVIF, and HEIC file extensions; OCR support and results vary by format and image quality.
 
 ## Available Scripts
 
@@ -166,10 +169,12 @@ Run these commands from the project root:
 | Command | Purpose |
 | --- | --- |
 | `npm run install:all` | Install root, server, and client dependencies |
-| `npm run dev` | Start frontend and backend together |
+| `npm run dev` | Start frontend and backend together for development |
 | `npm run server` | Start only the backend in watch mode |
 | `npm run client` | Start only the Vite frontend |
-| `npm run start` | Alias for `npm run dev` |
+| `npm run build` | Install server/client dependencies and build the frontend |
+| `npm run build:client` | Alias for the root build command |
+| `npm run start` | Build the frontend, then start the backend in production mode |
 
 Run these commands from `client`:
 
@@ -179,8 +184,6 @@ Run these commands from `client`:
 | `npm run lint` | Run Oxlint |
 | `npm run preview` | Preview the production frontend build |
 
-Run backend tests from `server` with `npm test`.
-
 ## Project Structure
 
 ```text
@@ -188,16 +191,26 @@ Run backend tests from `server` with `npm test`.
 ├── client/
 │   ├── src/
 │   │   ├── views/          # Dashboard, transactions, budgets, OCR, AI, and other screens
+│   │   ├── components/     # Shared navigation and layout components
+│   │   ├── utils/          # Category styles, category definitions, and HTML sanitization
+│   │   ├── index.css       # Global styles
 │   │   ├── App.jsx         # Frontend routes and application shell
 │   │   └── main.jsx        # React entry point
 │   └── vite.config.js      # Development server and API proxy
+├── api/
+│   └── index.js            # Vercel serverless API adapter
 ├── server/
+│   ├── .env.example        # Environment variable template
+│   ├── middleware/         # Authentication middleware
 │   ├── models/             # Mongoose data models
 │   ├── routes/             # Express API routes
-│   ├── services/           # AI, OCR, forecast, subscription, seed, and JSON services
+│   ├── services/           # AI, TensorFlow, OCR, forecast, subscription, and JSON services
+│   ├── utils/              # Gemini client and model helpers
+│   ├── data/db.json        # Local JSON fallback database
 │   ├── uploads/            # Runtime receipt uploads, created automatically
 │   ├── server.js           # Express and database entry point
 │   └── eng.traineddata     # English Tesseract OCR data
+├── .github/workflows/      # CI workflow
 ├── package.json             # Root scripts for both applications
 └── .gitignore
 ```
@@ -222,7 +235,7 @@ Stop the process using the port. The backend port can be changed with `PORT` in 
 
 ### OCR scanning fails
 
-Use a clear JPG, JPEG, or PNG receipt under 5 MB. Ensure the backend is running and that `server/eng.traineddata` is present.
+Use a clear image smaller than 10 MB. Ensure the backend is running and that `server/eng.traineddata` is present.
 
 ## Deployment to Vercel
 
@@ -243,7 +256,7 @@ In Project Settings → Environment Variables, add:
 - `GEMINI_API_KEY`: Google Gemini API key
 - `GEMINI_MODEL`: `gemini-1.5-flash`
 - `AUTH_SECRET`: Random 32+ character JWT secret string
-- `APP_PASSWORD`: Admin password for authentication
+- `APP_PASSWORD`: Optional shared password for the single local fallback account; use registered accounts for separate users
 - `NODE_ENV`: `production`
 
 > **Note**: In MongoDB Atlas Network Access, ensure IP `0.0.0.0/0` (Allow Access from Anywhere) is enabled so Vercel's dynamic serverless functions can connect.
@@ -255,12 +268,12 @@ Click **Deploy**. Vercel will build the frontend and serve both the static Vite 
 
 - Never commit `server/.env`, API keys, passwords, or database credentials.
 - If a key is accidentally pushed, revoke it immediately and create a replacement. Removing it in a later commit is not enough.
-- This project is intended as a prototype. Add authentication, authorization, rate limiting, input hardening, and production secrets management before deploying it publicly.
+- This project is a prototype. Review the authentication and authorization design, add rate limiting and production-grade secrets management, and perform a deployment security review before exposing it publicly.
 
 ## Contributing
 
 1. Create a feature branch.
-2. Make and test your changes.
+2. Make your changes and validate them with the available lint and build checks.
 3. Run `cd client && npm run lint && npm run build`.
 4. Open a pull request describing the change and any setup requirements.
 

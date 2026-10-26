@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import apiRoutes from './routes/api.js';
-import { seedDatabase } from './services/seedService.js';
+import Budget from './models/Budget.js';
 import { checkAndLogDueSubscriptions } from './services/subscriptionService.js';
 
 dotenv.config();
@@ -34,14 +34,48 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Cached MongoDB connection helper for Serverless & Long-running servers
 let isConnecting = false;
+let isBudgetIndexMigrated = false;
+let budgetIndexMigrationPromise = null;
+
+async function ensureBudgetIndexes() {
+  if (isBudgetIndexMigrated) return;
+
+  if (!budgetIndexMigrationPromise) {
+    budgetIndexMigrationPromise = (async () => {
+      await Budget.createIndexes();
+      const indexes = await Budget.collection.indexes();
+      const legacyIndex = indexes.find((index) =>
+        index.name === 'category_1_month_1' && index.unique
+      );
+      if (legacyIndex) {
+        await Budget.collection.dropIndex(legacyIndex.name);
+      }
+      isBudgetIndexMigrated = true;
+    })();
+  }
+
+  try {
+    await budgetIndexMigrationPromise;
+  } catch (error) {
+    budgetIndexMigrationPromise = null;
+    throw error;
+  }
+}
+
 export async function connectDB() {
-  if (mongoose.connection.readyState === 1) return mongoose.connection;
+  if (mongoose.connection.readyState === 1) {
+    await ensureBudgetIndexes();
+    return mongoose.connection;
+  }
   if (!MONGODB_URI) return null;
   if (isConnecting) {
     // Wait for in-flight connection attempt
     while (isConnecting) {
       await new Promise(r => setTimeout(r, 100));
-      if (mongoose.connection.readyState === 1) return mongoose.connection;
+      if (mongoose.connection.readyState === 1) {
+        await ensureBudgetIndexes();
+        return mongoose.connection;
+      }
     }
   }
 
@@ -51,6 +85,7 @@ export async function connectDB() {
       serverSelectionTimeoutMS: MONGODB_TIMEOUT_MS,
       bufferCommands: false
     });
+    await ensureBudgetIndexes();
     console.log('=== MongoDB Connected Successfully ===');
     return mongoose.connection;
   } catch (error) {
@@ -137,9 +172,6 @@ async function initializeDatabase() {
     return;
   }
 
-  if (process.env.NODE_ENV !== 'production') {
-    await seedDatabase();
-  }
   try {
     const result = await checkAndLogDueSubscriptions(false);
     console.log(`=== Subscriptions scheduler (MongoDB) logged ${result.loggedTransactionsCount} due entries ===`);

@@ -19,10 +19,6 @@ export function generateToken(user) {
   );
 }
 
-export function createToken(user = { id: 'default-user', username: 'default-user', email: 'default@expensewise.local' }) {
-  return generateToken(user);
-}
-
 export async function authenticate(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
@@ -32,6 +28,9 @@ export async function authenticate(req, res, next) {
 
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
+    if (typeof decoded.id !== 'string' || decoded.id.length === 0) {
+      return res.status(401).json({ error: 'Invalid or malformed authentication token' });
+    }
     req.userId = decoded.id;
     req.user = decoded;
     next();
@@ -98,44 +97,44 @@ export async function register(req, res) {
           currency: newUser.currency
         }
       });
-    } else {
-      // Offline fallback
-      const db = readRawData();
-      if (!db.users) db.users = [];
-
-      const existing = db.users.find(
-        u => u.username === normalizedUsername || u.email === normalizedEmail
-      );
-      if (existing) {
-        if (existing.username === normalizedUsername) {
-          return res.status(409).json({ error: 'Username is already taken' });
-        }
-        return res.status(409).json({ error: 'Email is already registered' });
-      }
-
-      const newUser = {
-        _id: 'user_' + Date.now(),
-        username: normalizedUsername,
-        email: normalizedEmail,
-        password: hashedPassword,
-        currency: 'INR',
-        createdAt: new Date().toISOString()
-      };
-      db.users.push(newUser);
-      writeRawData(db);
-
-      const token = generateToken(newUser);
-      return res.status(201).json({
-        message: 'Account registered successfully',
-        token,
-        user: {
-          id: newUser._id,
-          username: newUser.username,
-          email: newUser.email,
-          currency: newUser.currency
-        }
-      });
     }
+
+    // Offline fallback
+    const db = readRawData();
+    if (!db.users) db.users = [];
+
+    const existing = db.users.find(
+      u => u.username === normalizedUsername || u.email === normalizedEmail
+    );
+    if (existing) {
+      if (existing.username === normalizedUsername) {
+        return res.status(409).json({ error: 'Username is already taken' });
+      }
+      return res.status(409).json({ error: 'Email is already registered' });
+    }
+
+    const newUser = {
+      _id: 'user_' + Date.now(),
+      username: normalizedUsername,
+      email: normalizedEmail,
+      password: hashedPassword,
+      currency: 'INR',
+      createdAt: new Date().toISOString()
+    };
+    db.users.push(newUser);
+    writeRawData(db);
+
+    const token = generateToken(newUser);
+    return res.status(201).json({
+      message: 'Account registered successfully',
+      token,
+      user: {
+        id: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        currency: newUser.currency
+      }
+    });
   } catch (error) {
     console.error('Registration error:', error);
     return res.status(500).json({ error: 'Registration failed. Please try again.' });
@@ -209,16 +208,16 @@ export async function getCurrentUser(req, res) {
         return res.status(404).json({ error: 'User not found' });
       }
       return res.json({ user });
-    } else {
-      const db = readRawData();
-      const user = (db.users || []).find(u => u._id === userId);
-      if (!user) {
-        return res.json({ user: { id: userId, username: req.user.username, email: req.user.email } });
-      }
-      const { password, ...safeUser } = user;
-      return res.json({ user: safeUser });
     }
-  } catch (error) {
+
+    const db = readRawData();
+    const user = (db.users || []).find(u => u._id === userId);
+    if (!user) {
+      return res.json({ user: { id: userId, username: req.user.username, email: req.user.email } });
+    }
+    const { password: _password, ...safeUser } = user;
+    return res.json({ user: safeUser });
+  } catch {
     return res.status(500).json({ error: 'Failed to fetch user profile' });
   }
 }
@@ -241,7 +240,7 @@ export async function validateUsername(req, res) {
       return res.status(409).json({ valid: false, error: 'Username is already taken' });
     }
     return res.json({ valid: true });
-  } catch (error) {
+  } catch {
     return res.status(500).json({ error: 'Validation error' });
   }
 }
@@ -265,7 +264,7 @@ export async function validateEmail(req, res) {
       return res.status(409).json({ valid: false, error: 'Email is already in use' });
     }
     return res.json({ valid: true });
-  } catch (error) {
+  } catch {
     return res.status(500).json({ error: 'Validation error' });
   }
 }

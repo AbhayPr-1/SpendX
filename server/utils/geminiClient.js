@@ -8,7 +8,7 @@ dotenv.config();
 // ---------------------------------------------------------------------------
 
 const MODEL_CASCADE = [
-  process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite',
   'gemini-1.5-flash',
   'gemini-1.5-flash-8b',
 ];
@@ -33,7 +33,7 @@ function extractRetryDelayMs(error, defaultMs = 5000) {
       const m = error.message.match(/retry in ([\d.]+)s/i);
       if (m) return Math.ceil(parseFloat(m[1]) * 1000) + 500;
     }
-  } catch (_) {
+  } catch {
     // ignore
   }
   return defaultMs;
@@ -62,12 +62,10 @@ export async function generateContentWithRetry(model, prompt, retries = 3, baseD
 
       if (isRetryable && i < retries) {
         const waitMs = is429 ? extractRetryDelayMs(error, delay) : delay;
-        if (process.env.NODE_ENV !== 'test') {
-          console.warn(
-            `Gemini API: ${is429 ? 'Quota/rate-limit' : 'Overloaded'} (attempt ${i + 1}/${retries}). ` +
-            `Waiting ${waitMs}ms before retry...`
-          );
-        }
+        console.warn(
+          `Gemini API: ${is429 ? 'Quota/rate-limit' : 'Overloaded'} (attempt ${i + 1}/${retries}). ` +
+          `Waiting ${waitMs}ms before retry...`
+        );
         await new Promise((resolve) => setTimeout(resolve, waitMs));
         delay = Math.round(delay * 2); // exponential backoff for subsequent retries
       } else {
@@ -102,15 +100,11 @@ if (geminiApiKey) {
       }),
     };
 
-    if (process.env.NODE_ENV !== 'test') {
-      console.log(`Gemini Client: initialized (primary model: ${primary}, cascade: ${MODEL_CASCADE.join(' → ')}).`);
-    }
+    console.log(`Gemini Client: initialized (primary model: ${primary}, cascade: ${MODEL_CASCADE.join(' → ')}).`);
   } catch (error) {
-    if (process.env.NODE_ENV !== 'test') {
-      console.error('Gemini Client: initialization failed.', error);
-    }
+    console.error('Gemini Client: initialization failed.', error);
   }
-} else if (process.env.NODE_ENV !== 'test') {
+} else {
   console.log('Gemini Client: No GEMINI_API_KEY found — running in local fallback mode.');
 }
 
@@ -172,9 +166,7 @@ export async function generateContentWithCascade(prompt, type = 'text') {
         status === 429 || msg.includes('429') || msg.toLowerCase().includes('quota');
 
       if (isQuotaExhausted && MODEL_CASCADE.indexOf(modelName) < MODEL_CASCADE.length - 1) {
-        if (process.env.NODE_ENV !== 'test') {
-          console.warn(`Gemini: Quota exhausted on ${modelName}, trying next model in cascade...`);
-        }
+        console.warn(`Gemini: Quota exhausted on ${modelName}, trying next model in cascade...`);
         lastError = error;
         continue;
       }

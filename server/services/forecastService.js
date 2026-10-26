@@ -205,14 +205,11 @@ Format: use div, p, strong, ul, li, and inline styles (color: #ef4444 for danger
 
 function generateLocalInsights(trendDirection, slope, highestCat, recommendations) {
   let directionText = '';
-  let trendColor = 'color: #38bdf8;';
 
   if (trendDirection === 'upward') {
     directionText = `Your overall cash outflow is on an <strong>upward trend</strong>, increasing by an average of <strong>₹${Math.round(slope)}</strong> per month. We recommend reviewing your optional categories.`;
-    trendColor = 'color: #ef4444;';
   } else if (trendDirection === 'downward') {
     directionText = `Excellent work! Your monthly expenses are on a <strong>downward trend</strong>, decreasing by <strong>₹${Math.round(Math.abs(slope))}</strong> per month.`;
-    trendColor = 'color: #10b981;';
   } else {
     directionText = `Your monthly spending is relatively <strong>stable</strong>, showing minor variations.`;
   }

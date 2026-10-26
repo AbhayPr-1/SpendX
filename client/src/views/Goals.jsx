@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { 
   Target, Plus, Clock, Sparkles, TrendingUp, 
   Edit2, Trash2, PiggyBank, ShieldCheck, Car, Home, Plane, 

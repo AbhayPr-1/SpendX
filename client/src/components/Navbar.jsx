@@ -1,4 +1,3 @@
-import React from 'react';
 import { Menu, LogOut, User, Sun, Moon } from 'lucide-react';
 
 export default function Navbar({ onToggleSidebar, user, onSignOut, darkMode, onToggleDark }) {
