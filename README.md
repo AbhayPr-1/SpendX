@@ -16,7 +16,7 @@ Finance AI Expense Tracker is a full-stack personal-finance dashboard for record
 ## Technology
 
 - Frontend: React, Vite, React Router, Chart.js, Lucide React
-- Backend: Node.js, Express, Mongoose, Multer, Tesseract.js, TensorFlow.js
+- Backend: Node.js, Express, Mongoose, Multer, Tesseract.js, TensorFlow.js (JavaScript backend)
 - Database: MongoDB, with local JSON fallback
 - AI: Google Gemini API, optional
 
@@ -24,7 +24,7 @@ Finance AI Expense Tracker is a full-stack personal-finance dashboard for record
 
 Install these before starting:
 
-- Node.js 20 or newer, with npm
+- Node.js 20 or newer, with npm. Use a currently supported Node.js LTS release; Node 20 is no longer in support.
 - Git
 - MongoDB 7 or newer, either running locally or a MongoDB Atlas connection string (optional; the app falls back to a local JSON database)
 - A Gemini API key if you want AI features. The application still runs with local fallback logic without one.
@@ -64,6 +64,8 @@ cd server && npm install --legacy-peer-deps
 cd ../client && npm install --legacy-peer-deps
 cd ..
 ```
+
+The server uses the JavaScript TensorFlow.js backend. It does not install the optional native `@tensorflow/tfjs-node` binding, so installation does not require Python or Visual Studio C++ build tools for TensorFlow. TensorFlow category prediction falls back to the app's rule-based categorizer if the JavaScript backend is unavailable.
 
 ## Configure Environment Variables
 
