@@ -1,69 +1,93 @@
-import { Menu, LogOut, User, Sun, Moon } from 'lucide-react';
+import { useState } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { Menu, Search, Sun, Moon, Sparkles } from 'lucide-react';
 
-export default function Navbar({ onToggleSidebar, user, onSignOut, darkMode, onToggleDark }) {
-  const username = user?.username || 'User';
+const quickLinks = [
+  { label: 'Overview', to: '/', end: true },
+  { label: 'Expenses', to: '/transactions' },
+  { label: 'Budgets', to: '/budgets' },
+  { label: 'Goals', to: '/goals' },
+];
+
+export default function Navbar({ onToggleSidebar, sidebarExpanded, user, darkMode, onToggleDark }) {
+  const [search, setSearch] = useState('');
+  const navigate = useNavigate();
+  const username = user?.name || user?.username || 'Account';
+  const initials = username
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'U';
+
+  function handleSearch(event) {
+    event.preventDefault();
+    const query = search.trim();
+    navigate(query ? `/transactions?search=${encodeURIComponent(query)}` : '/transactions');
+  }
 
   return (
     <header className="topbar">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <div className="topbar-leading">
         <button
           type="button"
           className="topbar-toggle-btn"
-          id="sidebarCollapse"
           onClick={onToggleSidebar}
-          title="Toggle Navigation"
+          title={sidebarExpanded ? 'Collapse navigation' : 'Expand navigation'}
+          aria-label={sidebarExpanded ? 'Collapse navigation' : 'Expand navigation'}
+          aria-controls="sidebar"
+          aria-expanded={sidebarExpanded}
         >
-          <Menu size={20} />
+          <Menu size={20} aria-hidden="true" />
         </button>
-        <div>
-          <h1 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.2px', transition: 'color var(--t-smooth)' }}>
-            SpendX Dashboard
-          </h1>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', transition: 'color var(--t-smooth)' }}>
-            Welcome back, <strong style={{ color: 'var(--color-primary)' }}>{username}</strong>
-          </span>
-        </div>
+
+        <form className="topbar-search" role="search" onSubmit={handleSearch}>
+          <Search size={18} aria-hidden="true" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search transactions"
+            aria-label="Search transactions"
+          />
+          <button type="submit" className="search-submit" aria-label="Open matching transactions">
+            ↵
+          </button>
+        </form>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        {/* Dark mode toggle */}
+      <nav className="topbar-tabs" aria-label="Quick navigation">
+        {quickLinks.map(({ label, to, end }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            className={({ isActive }) => `topbar-tab ${isActive ? 'active' : ''}`}
+          >
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="topbar-actions">
+        <NavLink to="/advisor" className="topbar-ai-link">
+          <Sparkles size={16} aria-hidden="true" />
+          <span>Ask AI</span>
+        </NavLink>
         <button
           type="button"
           className="theme-toggle-btn"
           onClick={onToggleDark}
-          title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          aria-label="Toggle dark mode"
+          title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
         >
-          {darkMode
-            ? <Sun size={17} style={{ color: '#fbbf24' }} />
-            : <Moon size={17} style={{ color: '#6366f1' }} />
-          }
+          {darkMode ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
         </button>
-
-        {/* User pill */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
-          padding: '6px 12px',
-          background: 'var(--bg-muted)',
-          borderRadius: 'var(--radius-sm)',
-          border: '1px solid var(--border-color)',
-          transition: 'background var(--t-smooth), border-color var(--t-smooth)',
-        }}>
-          <User size={15} color="var(--color-primary)" />
-          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', transition: 'color var(--t-smooth)' }}>
-            {username}
-          </span>
+        <div className="topbar-account" title={username}>
+          <span className="topbar-avatar" aria-hidden="true">{initials}</span>
+          <span className="topbar-account-name">{username}</span>
         </div>
-
-        <button
-          type="button"
-          className="btn btn-outline-danger btn-sm"
-          style={{ padding: '7px 14px', fontSize: '13px' }}
-          onClick={onSignOut}
-        >
-          <LogOut size={14} />
-          <span>Sign Out</span>
-        </button>
       </div>
     </header>
   );

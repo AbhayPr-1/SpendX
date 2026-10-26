@@ -1,20 +1,36 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { IndianRupee, Receipt, Sparkles, Plus, ArrowRight, Wallet } from 'lucide-react';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title } from 'chart.js';
+import { IndianRupee, Receipt, Sparkles, Plus, ArrowRight, Wallet, CalendarDays } from 'lucide-react';
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  LineElement,
+} from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
 import { getBadgeClass } from '../utils/categoryStyles';
 import { EXPENSE_CATEGORIES } from '../utils/categories';
 
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title);
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement);
 
-export default function Dashboard() {
+const formatMoney = (amount) => new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0,
+}).format(Number(amount) || 0);
+
+export default function Dashboard({ darkMode }) {
   const [stats, setStats] = useState({
     totalSpent: 0,
     categoriesData: [],
     recentTransactions: [],
-    transactionCount: 0
+    transactionCount: 0,
   });
   const [aiInsight, setAiInsight] = useState('');
   const [historyData, setHistoryData] = useState([]);
@@ -22,30 +38,26 @@ export default function Dashboard() {
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [loadingAi, setLoadingAi] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  
-  // New transaction form state
+  const [savingTransaction, setSavingTransaction] = useState(false);
   const [form, setForm] = useState({
     description: '',
     amount: '',
     category: '',
     paymentMethod: 'Cash',
     date: new Date().toISOString().split('T')[0],
-    notes: ''
+    notes: '',
   });
-  const [savingTransaction, setSavingTransaction] = useState(false);
 
-  const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const monthLabel = new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 
   const fetchStats = useCallback(async () => {
     try {
       setLoadingStats(true);
-      const res = await fetch(`/api/dashboard/stats?month=${currentMonth}`);
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch dashboard stats:', err);
+      const response = await fetch(`/api/dashboard/stats?month=${currentMonth}`);
+      if (response.ok) setStats(await response.json());
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats:', error);
     } finally {
       setLoadingStats(false);
     }
@@ -54,20 +66,20 @@ export default function Dashboard() {
   const fetchAiInsight = useCallback(async () => {
     try {
       setLoadingAi(true);
-      const res = await fetch('/api/advisor/chat', {
+      const response = await fetch('/api/advisor/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: currentMonth })
+        body: JSON.stringify({ month: currentMonth }),
       });
-      if (res.ok) {
-        const data = await res.json();
+      if (response.ok) {
+        const data = await response.json();
         setAiInsight(data.html);
       } else {
-        setAiInsight('<p>Unable to connect to AI Advisor. Set up GEMINI_API_KEY to start analyzing.</p>');
+        setAiInsight('<p>Unable to connect to the AI Advisor. Check your AI service setup to enable personalized insights.</p>');
       }
-    } catch (err) {
-      console.error('Failed to fetch AI insights:', err);
-      setAiInsight('<p>Offline Mode: AI Advisor is currently inactive.</p>');
+    } catch (error) {
+      console.error('Failed to fetch AI insights:', error);
+      setAiInsight('<p>The AI Advisor is offline. Your spending overview is still available.</p>');
     } finally {
       setLoadingAi(false);
     }
@@ -76,13 +88,10 @@ export default function Dashboard() {
   const fetchHistory = useCallback(async () => {
     try {
       setLoadingHistory(true);
-      const res = await fetch('/api/dashboard/history');
-      if (res.ok) {
-        const data = await res.json();
-        setHistoryData(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch dashboard history:', err);
+      const response = await fetch('/api/dashboard/history');
+      if (response.ok) setHistoryData(await response.json());
+    } catch (error) {
+      console.error('Failed to fetch dashboard history:', error);
     } finally {
       setLoadingHistory(false);
     }
@@ -92,23 +101,23 @@ export default function Dashboard() {
     void Promise.all([fetchStats(), fetchAiInsight(), fetchHistory()]);
   }, [fetchAiInsight, fetchHistory, fetchStats]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+  const handleInputChange = (event) => {
+    const { name, value } = event.target;
+    setForm((previous) => ({ ...previous, [name]: value }));
   };
 
-  const handleAddSubmit = async (e) => {
-    e.preventDefault();
+  const handleAddSubmit = async (event) => {
+    event.preventDefault();
     if (!form.description || !form.amount) return;
 
     try {
       setSavingTransaction(true);
-      const res = await fetch('/api/transactions', {
+      const response = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify(form),
       });
-      if (res.ok) {
+      if (response.ok) {
         setShowAddModal(false);
         setForm({
           description: '',
@@ -116,359 +125,341 @@ export default function Dashboard() {
           category: '',
           paymentMethod: 'Cash',
           date: new Date().toISOString().split('T')[0],
-          notes: ''
+          notes: '',
         });
-        // Refresh data
-        fetchStats();
-        fetchAiInsight();
+        void Promise.all([fetchStats(), fetchAiInsight(), fetchHistory()]);
       }
-    } catch (err) {
-      console.error('Failed to save transaction:', err);
+    } catch (error) {
+      console.error('Failed to save transaction:', error);
     } finally {
       setSavingTransaction(false);
     }
   };
 
-  // Prepare chart data
-  const chartCategories = stats.categoriesData.filter(c => c.spent > 0);
+  const categories = Array.isArray(stats.categoriesData) ? stats.categoriesData : [];
+  const chartCategories = categories.filter((category) => Number(category.spent) > 0);
+  const totalSpent = Number(stats.totalSpent) || 0;
+  const totalBudget = categories.reduce((sum, category) => sum + (Number(category.limit) || 0), 0);
+  const budgetUsage = totalBudget > 0 ? Math.min(100, (totalSpent / totalBudget) * 100) : 0;
+  const topCategory = [...chartCategories].sort((a, b) => Number(b.spent) - Number(a.spent))[0]?.category || '—';
+  const budgetMessage = totalBudget === 0
+    ? 'Set category limits to see your monthly budget progress.'
+    : totalSpent > totalBudget
+      ? `${formatMoney(totalSpent - totalBudget)} over your monthly budget`
+      : `${formatMoney(totalBudget - totalSpent)} left in your monthly budget`;
+  const chartTextColor = darkMode ? '#aab4bd' : '#687580';
+  const chartGridColor = darkMode ? 'rgba(235,242,247,0.09)' : 'rgba(72,88,102,0.12)';
+
   const doughnutData = {
-    labels: chartCategories.map(c => c.category),
-    datasets: [
-      {
-        data: chartCategories.map(c => c.spent),
-        backgroundColor: [
-          '#0284c7', // Food (deep blue)
-          '#0ea5e9', // Transport (medium ice blue)
-          '#38bdf8', // Utilities (light ice blue)
-          '#0d9488', // Shopping (aurora teal)
-          '#14b8a6', // Entertainment (teal)
-          '#10b981', // Healthcare (emerald)
-          '#34d399', // Education (light emerald)
-          '#059669', // Travel (deep emerald)
-          '#6b7280'  // Misc (grey)
-        ],
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)'
-      }
-    ]
+    labels: chartCategories.map((category) => category.category),
+    datasets: [{
+      data: chartCategories.map((category) => category.spent),
+      backgroundColor: ['#d9f33f', '#9fb5c7', '#b7c7d4', '#7fa995', '#c7b895', '#8aa9d4', '#d6a98f', '#98a0a9', '#bcc6cc'],
+      borderWidth: 3,
+      borderColor: darkMode ? '#1a1f23' : '#f9fbfd',
+    }],
   };
 
   const doughnutOptions = {
+    responsive: true,
     plugins: {
       legend: {
         position: 'right',
-        labels: {
-          color: '#e5e7eb',
-          font: { family: 'Inter', size: 12 }
-        }
-      }
+        labels: { color: chartTextColor, font: { family: 'Inter', size: 12 }, padding: 16, usePointStyle: true },
+      },
     },
-    maintainAspectRatio: false
+    maintainAspectRatio: false,
   };
 
-  // Prepare 12-month budget vs actual comparison data
   const barChartData = {
-    labels: historyData.map(h => h.label),
+    labels: historyData.map((item) => item.label),
     datasets: [
       {
         type: 'bar',
-        label: 'Actual Spent (₹)',
-        data: historyData.map(h => h.spent),
-        backgroundColor: 'rgba(14, 165, 233, 0.65)',
-        borderColor: '#0ea5e9',
-        borderWidth: 1,
-        borderRadius: 4,
-        order: 2
+        label: 'Spent',
+        data: historyData.map((item) => item.spent),
+        backgroundColor: historyData.map((_, index) => index === historyData.length - 1 ? '#d9f33f' : (darkMode ? '#45515a' : '#d2dce5')),
+        borderColor: 'transparent',
+        borderWidth: 0,
+        borderRadius: 8,
+        maxBarThickness: 38,
+        order: 2,
       },
       {
         type: 'line',
-        label: 'Total Budget (₹)',
-        data: historyData.map(h => h.budget),
-        borderColor: '#10b981',
+        label: 'Budget',
+        data: historyData.map((item) => item.budget),
+        borderColor: darkMode ? '#aab4bd' : '#6c7883',
         borderWidth: 2,
         fill: false,
-        pointBackgroundColor: '#10b981',
-        pointBorderColor: '#10b981',
+        pointBackgroundColor: darkMode ? '#aab4bd' : '#6c7883',
+        pointBorderColor: darkMode ? '#aab4bd' : '#6c7883',
         pointRadius: 3,
         borderDash: [5, 5],
-        order: 1
-      }
-    ]
+        order: 1,
+      },
+    ],
   };
 
   const barChartOptions = {
     responsive: true,
     plugins: {
-      legend: {
-        labels: {
-          color: '#e5e7eb',
-          font: { family: 'Inter', size: 12 }
-        }
-      },
+      legend: { labels: { color: chartTextColor, font: { family: 'Inter', size: 12 }, usePointStyle: true, padding: 18 } },
       tooltip: {
         callbacks: {
-          label: function(context) {
-            let label = context.dataset.label || '';
-            if (label) {
-              label += ': ';
-            }
-            if (context.parsed.y !== null) {
-              label += '₹' + context.parsed.y.toLocaleString('en-IN');
-            }
-            return label;
-          }
-        }
-      }
+          label: (context) => `${context.dataset.label}: ${formatMoney(context.parsed.y)}`,
+        },
+      },
     },
     scales: {
       x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          color: '#9ca3af',
-          font: { family: 'Inter', size: 10 }
-        }
+        grid: { display: false },
+        ticks: { color: chartTextColor, font: { family: 'Inter', size: 10 } },
       },
       y: {
-        grid: {
-          color: 'rgba(255, 255, 255, 0.05)'
-        },
+        grid: { color: chartGridColor },
         ticks: {
-          color: '#9ca3af',
+          color: chartTextColor,
           font: { family: 'Inter', size: 10 },
-          callback: function(value) {
-            return '₹' + value.toLocaleString('en-IN');
-          }
-        }
-      }
+          callback: (value) => `₹${Number(value).toLocaleString('en-IN')}`,
+        },
+      },
     },
-    maintainAspectRatio: false
+    maintainAspectRatio: false,
   };
 
   return (
-    <div>
-      <div className="view-header">
+    <div className="dashboard-page">
+      <div className="view-header dashboard-header">
         <div className="view-title-container">
-          <h1 className="view-title">Financial Dashboard</h1>
-          <p className="view-subtitle">Monitor and optimize your monthly budget in real time.</p>
+          <span className="dashboard-eyebrow">Your finances</span>
+          <h1 className="view-title">Financial Overview</h1>
+          <p className="view-subtitle">Your money, at a glance.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-          <Plus size={18} /> Quick Expense
-        </button>
+        <div className="dashboard-header-actions">
+          <div className="dashboard-month-chip">
+            <CalendarDays size={16} aria-hidden="true" />
+            <span>{monthLabel}</span>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+            <Plus size={17} aria-hidden="true" /> Add expense
+          </button>
+        </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="kpi-grid">
-        <div className="card kpi-card">
-          <div className="kpi-icon" style={{ backgroundColor: 'rgba(14, 165, 233, 0.15)', color: 'var(--color-primary)' }}>
-            <IndianRupee size={24} />
-          </div>
+      <section className="kpi-grid dashboard-kpis" aria-label="Monthly summary">
+        <article className="card kpi-card dashboard-kpi-card">
+          <div className="kpi-icon"><IndianRupee size={21} aria-hidden="true" /></div>
           <div className="kpi-details">
-            <span className="kpi-label">Total Outflow ({new Date().toLocaleString('default', { month: 'long' })})</span>
-            <span className="kpi-value">₹{stats.totalSpent.toFixed(2)}</span>
+            <span className="kpi-label">Money out</span>
+            <span className="kpi-value">{formatMoney(totalSpent)}</span>
+            <span className="kpi-note">Spent this month</span>
           </div>
-        </div>
-
-        <div className="card kpi-card">
-          <div className="kpi-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
-            <Receipt size={24} />
-          </div>
+        </article>
+        <article className="card kpi-card dashboard-kpi-card">
+          <div className="kpi-icon"><Receipt size={21} aria-hidden="true" /></div>
           <div className="kpi-details">
-            <span className="kpi-label">Transactions Tracked</span>
+            <span className="kpi-label">Transactions</span>
             <span className="kpi-value">{stats.transactionCount}</span>
+            <span className="kpi-note">Recorded this month</span>
           </div>
-        </div>
-
-        <div className="card kpi-card">
-          <div className="kpi-icon" style={{ backgroundColor: 'rgba(13, 148, 136, 0.15)', color: 'var(--color-secondary)' }}>
-            <Wallet size={24} />
-          </div>
+        </article>
+        <article className="card kpi-card dashboard-kpi-card">
+          <div className="kpi-icon"><Wallet size={21} aria-hidden="true" /></div>
           <div className="kpi-details">
-            <span className="kpi-label">Primary Method</span>
-            <span className="kpi-value">
-              {stats.recentTransactions.length > 0 ? stats.recentTransactions[0].paymentMethod : 'N/A'}
-            </span>
+            <span className="kpi-label">Top category</span>
+            <span className="kpi-value kpi-value-category">{topCategory}</span>
+            <span className="kpi-note">By monthly spend</span>
           </div>
-        </div>
-      </div>
+        </article>
+      </section>
 
-      {/* Main Dashboard Layout Grid */}
-      <div className="dashboard-grid">
-        {/* Left Side: 12-Month Outflow vs Budget comparison */}
-        <div className="card chart-card">
-          <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            12-Month Budget vs Spent
-          </h3>
-          <div style={{ height: '280px', position: 'relative' }}>
+      <section className="dashboard-grid dashboard-main-grid" aria-label="Spending overview">
+        <article className="card chart-card dashboard-chart-card">
+          <div className="dashboard-card-heading">
+            <div>
+              <h2>Expense statistics</h2>
+              <p>Monthly spend compared with your budget</p>
+            </div>
+            <span className="dashboard-chart-period">Last 12 months</span>
+          </div>
+          <div className="dashboard-chart-area">
             {loadingHistory ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
-                Loading historical portfolio data...
-              </div>
-            ) : historyData.length > 0 ? (
+              <div className="dashboard-empty-state">Loading your spending history…</div>
+            ) : historyData.some((item) => Number(item.spent) > 0 || Number(item.budget) > 0) ? (
               <Bar data={barChartData} options={barChartOptions} />
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
-                No history recorded.
-              </div>
+              <div className="dashboard-empty-state">Add an expense or set a budget to see your monthly history.</div>
             )}
           </div>
-        </div>
+        </article>
 
-        {/* Right Side: AI Insights Panel */}
-        <div className="card card-glowing" style={{ display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)' }}>
-            <Sparkles size={18} /> AI Financial Advisor
-          </h3>
-          
-          <div style={{ flexGrow: 1, overflowY: 'auto', maxHeight: '250px', fontSize: '14px', lineHeight: '1.6' }}>
-            {loadingAi ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '10px 0' }}>
-                <div style={{ height: '14px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', width: '90%', animation: 'pulse 1.5s infinite' }}></div>
-                <div style={{ height: '14px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', width: '80%', animation: 'pulse 1.5s infinite' }}></div>
-                <div style={{ height: '14px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', width: '60%', animation: 'pulse 1.5s infinite' }}></div>
+        <div className="dashboard-side-stack">
+          <article className="card dashboard-card budget-card">
+            <div className="dashboard-card-heading">
+              <div>
+                <h2>Monthly budget</h2>
+                <p>Spending against category limits</p>
               </div>
-            ) : (
-              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(aiInsight) }} />
-            )}
-          </div>
+              <Link to="/budgets" className="dashboard-text-link">Manage</Link>
+            </div>
+            <div className="budget-total-row">
+              <div>
+                <span className="dashboard-meta-label">Total spent</span>
+                <strong>{formatMoney(totalSpent)}</strong>
+              </div>
+              <div className="budget-limit-value">
+                <span className="dashboard-meta-label">Budget</span>
+                <strong>{totalBudget > 0 ? formatMoney(totalBudget) : 'Not set'}</strong>
+              </div>
+            </div>
+            <div
+              className="budget-progress-track"
+              role="progressbar"
+              aria-label="Monthly budget used"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow={Math.round(budgetUsage)}
+            >
+              <span style={{ width: `${budgetUsage}%` }} />
+            </div>
+            <div className="budget-progress-caption">
+              <span>{totalBudget > 0 ? `${Math.round(budgetUsage)}% used` : 'No limits yet'}</span>
+              <span>{budgetMessage}</span>
+            </div>
+          </article>
 
-          <Link to="/advisor" className="btn btn-secondary" style={{ marginTop: '16px', width: '100%', fontSize: '13px' }}>
-            Consult Advisor <ArrowRight size={14} />
-          </Link>
+          <article className="card dashboard-card dashboard-ai-card">
+            <div className="dashboard-card-heading">
+              <div>
+                <h2><Sparkles size={17} aria-hidden="true" /> AI insight</h2>
+                <p>A quick read on this month</p>
+              </div>
+              <span className="dashboard-ai-mark" aria-hidden="true"><Sparkles size={15} /></span>
+            </div>
+            <div className="dashboard-ai-preview">
+              {loadingAi ? (
+                <div className="dashboard-ai-loading" aria-label="Loading AI insight">
+                  <span /><span /><span />
+                </div>
+              ) : (
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(aiInsight) }} />
+              )}
+            </div>
+            <Link to="/advisor" className="dashboard-text-link dashboard-ai-link">
+              Open AI advisor <ArrowRight size={15} aria-hidden="true" />
+            </Link>
+          </article>
         </div>
-      </div>
+      </section>
 
-      {/* Bottom Grid: Category Distribution & Recent Transactions */}
-      <div className="dashboard-grid-1-2" style={{ margin: '30px 0' }}>
-        {/* Left Card: Category Distribution */}
-        <div className="card chart-card">
-          <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            Category Distribution
-          </h3>
-          <div style={{ height: '280px', position: 'relative' }}>
+      <section className="dashboard-grid-1-2 dashboard-lower-grid" aria-label="Category and transaction details">
+        <article className="card chart-card dashboard-card dashboard-category-card">
+          <div className="dashboard-card-heading">
+            <div>
+              <h2>Category breakdown</h2>
+              <p>Where your spending goes</p>
+            </div>
+          </div>
+          <div className="dashboard-doughnut-area">
             {chartCategories.length > 0 ? (
               <Doughnut data={doughnutData} options={doughnutOptions} />
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
-                No spending recorded for this month yet.
-              </div>
+              <div className="dashboard-empty-state">No spending recorded this month yet.</div>
             )}
           </div>
-        </div>
+        </article>
 
-        {/* Right Card: Recent Transactions */}
-        <div className="card" style={{ marginBottom: '0px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3>Recent Transactions</h3>
-            <Link to="/transactions" style={{ color: 'var(--color-primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '500' }}>
-              View All <ArrowRight size={14} />
+        <article className="card dashboard-card dashboard-transactions-card">
+          <div className="dashboard-card-heading">
+            <div>
+              <h2>Recent transactions</h2>
+              <p>Your latest activity</p>
+            </div>
+            <Link to="/transactions" className="dashboard-text-link">
+              View all <ArrowRight size={15} aria-hidden="true" />
             </Link>
           </div>
-
           <div className="table-container">
             {loadingStats ? (
-              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>Loading ledger...</div>
+              <div className="dashboard-empty-state">Loading transactions…</div>
             ) : stats.recentTransactions.length > 0 ? (
               <table className="transaction-table">
                 <thead>
                   <tr>
                     <th>Date</th>
-                    <th>Merchant / Description</th>
+                    <th>Merchant / description</th>
                     <th>Category</th>
-                    <th>Payment Method</th>
+                    <th>Payment method</th>
                     <th>Amount</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {stats.recentTransactions.map((tx) => (
-                    <tr key={tx._id}>
-                      <td>{new Date(tx.date).toLocaleDateString()}</td>
+                  {stats.recentTransactions.map((transaction) => (
+                    <tr key={transaction._id}>
+                      <td>{new Date(transaction.date).toLocaleDateString()}</td>
                       <td>
                         <div>
-                          <strong>{tx.merchant || 'General Merchant'}</strong>
-                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{tx.description}</div>
+                          <strong>{transaction.merchant || 'General merchant'}</strong>
+                          <div className="transaction-subtext">{transaction.description}</div>
                         </div>
                       </td>
-                      <td>
-                        <span className={`badge ${getBadgeClass(tx.category)}`}>
-                          {tx.category}
-                        </span>
-                      </td>
-                      <td>{tx.paymentMethod}</td>
-                      <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                        -₹{tx.amount.toFixed(2)}
-                      </td>
+                      <td><span className={`badge ${getBadgeClass(transaction.category)}`}>{transaction.category}</span></td>
+                      <td>{transaction.paymentMethod}</td>
+                      <td className="transaction-amount">−{formatMoney(transaction.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             ) : (
-              <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
-                No transactions recorded yet. Scan a receipt or use Quick Expense above!
-              </div>
+              <div className="dashboard-empty-state">No transactions yet. Add an expense or scan a receipt to get started.</div>
             )}
           </div>
-        </div>
-      </div>
+        </article>
+      </section>
 
-      {/* Quick Add Modal */}
       {showAddModal && (
         <div className="modal-overlay">
-          <div className="card modal-content" style={{ padding: '30px', borderRadius: 'var(--radius-md)' }}>
-            <h3 style={{ marginBottom: '20px' }}>Quick Expense Entry</h3>
-            
+          <div className="card modal-content dashboard-expense-modal" role="dialog" aria-modal="true" aria-labelledby="add-expense-title">
+            <h2 id="add-expense-title">Add an expense</h2>
+            <p className="view-subtitle">Record a payment and keep your monthly overview up to date.</p>
             <form onSubmit={handleAddSubmit}>
               <div className="form-group">
-                <label>Description *</label>
-                <input 
-                  type="text" 
-                  name="description" 
-                  value={form.description} 
+                <label htmlFor="quick-description">Description *</label>
+                <input
+                  id="quick-description"
+                  type="text"
+                  name="description"
+                  value={form.description}
                   onChange={handleInputChange}
-                  placeholder="e.g. Starbucks Latte or Taxi ride"
+                  placeholder="e.g. Coffee or taxi ride"
                   required
                 />
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  💡 Auto-categorization will run if category is left empty!
-                </span>
+                <span className="quick-expense-hint">Leave category blank to let automatic categorization choose one.</span>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Amount (₹) *</label>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    name="amount" 
-                    value={form.amount} 
-                    onChange={handleInputChange}
-                    placeholder="0.00"
-                    required
-                  />
+                  <label htmlFor="quick-amount">Amount (₹) *</label>
+                  <input id="quick-amount" type="number" step="0.01" min="0.01" name="amount" value={form.amount} onChange={handleInputChange} placeholder="0.00" required />
                 </div>
                 <div className="form-group">
-                  <label>Date</label>
-                  <input 
-                    type="date" 
-                    name="date" 
-                    value={form.date} 
-                    onChange={handleInputChange}
-                  />
+                  <label htmlFor="quick-date">Date</label>
+                  <input id="quick-date" type="date" name="date" value={form.date} onChange={handleInputChange} />
                 </div>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Category (Optional)</label>
-                  <select name="category" value={form.category} onChange={handleInputChange}>
-                    <option value="">Auto-Detect (AI)</option>
+                  <label htmlFor="quick-category">Category</label>
+                  <select id="quick-category" name="category" value={form.category} onChange={handleInputChange}>
+                    <option value="">Auto-detect</option>
                     {EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Payment Method</label>
-                  <select name="paymentMethod" value={form.paymentMethod} onChange={handleInputChange}>
+                  <label htmlFor="quick-payment-method">Payment method</label>
+                  <select id="quick-payment-method" name="paymentMethod" value={form.paymentMethod} onChange={handleInputChange}>
                     <option value="Cash">Cash</option>
                     <option value="Card">Card</option>
                     <option value="UPI">UPI</option>
@@ -479,22 +470,14 @@ export default function Dashboard() {
               </div>
 
               <div className="form-group">
-                <label>Notes</label>
-                <textarea 
-                  name="notes" 
-                  value={form.notes} 
-                  onChange={handleInputChange} 
-                  placeholder="Additional transaction info..."
-                  rows="2"
-                />
+                <label htmlFor="quick-notes">Notes</label>
+                <textarea id="quick-notes" name="notes" value={form.notes} onChange={handleInputChange} placeholder="Optional details" rows="2" />
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
-                  Cancel
-                </button>
+              <div className="dashboard-modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={savingTransaction}>
-                  {savingTransaction ? 'Saving...' : 'Add Expense'}
+                  {savingTransaction ? 'Saving…' : 'Add expense'}
                 </button>
               </div>
             </form>

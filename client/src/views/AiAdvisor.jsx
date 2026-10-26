@@ -33,7 +33,7 @@ export default function AiAdvisor() {
       setMessages([
         {
           sender: 'ai',
-          html: `<h4>📊 FinanceAI — Monthly Portfolio Snapshot</h4>
+          html: `<h4>📊 SpendX — Monthly Portfolio Snapshot</h4>
                  <p>Analysing your spending for <strong>${new Date(selectedMonth + '-15').toLocaleString('default', { month: 'long', year: 'numeric' })}</strong>. Ask me anything below.</p>
                  <div style="margin-top: 15px;">${html}</div>`
         }
@@ -112,7 +112,7 @@ export default function AiAdvisor() {
           <h1 className="view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Sparkles size={26} color="var(--color-primary)" /> AI Portfolio Advisor
           </h1>
-          <p className="view-subtitle">Consult FinanceAI to diagnose spending trends and structure savings habits.</p>
+          <p className="view-subtitle">Consult SpendX to diagnose spending trends and structure savings habits.</p>
         </div>
 
         {/* Month picker + refresh */}
@@ -160,7 +160,7 @@ export default function AiAdvisor() {
           {loading && (
             <div className="chat-message message-ai" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Loader2 className="animate-spin" size={16} />
-              <span>FinanceAI is analysing your portfolio...</span>
+              <span>SpendX is analysing your portfolio...</span>
             </div>
           )}
 

@@ -3,6 +3,7 @@ node_modules/
 dist/
 .vercel/
 .vite/
+.work/
 coverage/
 
 # Environment files and secrets

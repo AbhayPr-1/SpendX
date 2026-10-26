@@ -1,21 +1,21 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import Sidebar from './components/Sidebar';
 import Navbar from './components/Navbar';
 
-import Login from './views/Login';
-import Register from './views/Register';
-import Dashboard from './views/Dashboard';
-import OcrScanner from './views/OcrScanner';
-import Transactions from './views/Transactions';
-import Budgets from './views/Budgets';
-import Goals from './views/Goals';
-import AiAdvisor from './views/AiAdvisor';
-import Forecast from './views/Forecast';
-import Subscriptions from './views/Subscriptions';
-import Preferences from './views/Preferences';
-import Account from './views/Account';
+const Login = lazy(() => import('./views/Login'));
+const Register = lazy(() => import('./views/Register'));
+const Dashboard = lazy(() => import('./views/Dashboard'));
+const OcrScanner = lazy(() => import('./views/OcrScanner'));
+const Transactions = lazy(() => import('./views/Transactions'));
+const Budgets = lazy(() => import('./views/Budgets'));
+const Goals = lazy(() => import('./views/Goals'));
+const AiAdvisor = lazy(() => import('./views/AiAdvisor'));
+const Forecast = lazy(() => import('./views/Forecast'));
+const Subscriptions = lazy(() => import('./views/Subscriptions'));
+const Preferences = lazy(() => import('./views/Preferences'));
+const Account = lazy(() => import('./views/Account'));
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('spendx_token'));
@@ -27,7 +27,7 @@ export default function App() {
       return null;
     }
   });
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   // ── Dark Mode ──────────────────────────────────────────────
   const [darkMode, setDarkMode] = useState(() => {
@@ -94,31 +94,43 @@ export default function App() {
   return (
     <BrowserRouter>
       {!token ? (
-        <Routes>
-          <Route path="/login"    element={<Login    onLoginSuccess={handleLoginSuccess} darkMode={darkMode} onToggleDark={toggleDarkMode} />} />
-          <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} darkMode={darkMode} onToggleDark={toggleDarkMode} />} />
-          <Route path="*"         element={<Navigate to="/login" replace />} />
-        </Routes>
+        <Suspense fallback={<div className="route-loading">Loading…</div>}>
+          <Routes>
+            <Route path="/login"    element={<Login    onLoginSuccess={handleLoginSuccess} darkMode={darkMode} onToggleDark={toggleDarkMode} />} />
+            <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} darkMode={darkMode} onToggleDark={toggleDarkMode} />} />
+            <Route path="*"         element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Suspense>
       ) : (
         <div className="app-container">
           <Sidebar
             collapsed={sidebarCollapsed}
             user={user}
             onSignOut={handleSignOut}
+            onNavigate={() => setSidebarCollapsed(true)}
           />
+          {!sidebarCollapsed && (
+            <button
+              type="button"
+              className="sidebar-backdrop"
+              aria-label="Close navigation"
+              onClick={() => setSidebarCollapsed(true)}
+            />
+          )}
 
           <main className="main-content">
             <Navbar
               onToggleSidebar={() => setSidebarCollapsed(prev => !prev)}
+              sidebarExpanded={!sidebarCollapsed}
               user={user}
-              onSignOut={handleSignOut}
               darkMode={darkMode}
               onToggleDark={toggleDarkMode}
             />
 
             <div className="content-body">
-              <Routes>
-                <Route path="/"              element={<Dashboard />} />
+              <Suspense fallback={<div className="route-loading">Loading overview…</div>}>
+                <Routes>
+                <Route path="/"              element={<Dashboard darkMode={darkMode} />} />
                 <Route path="/transactions"  element={<Transactions />} />
                 <Route path="/budgets"       element={<Budgets />} />
                 <Route path="/goals"         element={<Goals />} />
@@ -129,7 +141,8 @@ export default function App() {
                 <Route path="/preferences"   element={<Preferences darkMode={darkMode} onToggleDark={toggleDarkMode} />} />
                 <Route path="/account"       element={<Account       user={user} onSignOut={handleSignOut} />} />
                 <Route path="*"              element={<Navigate to="/" replace />} />
-              </Routes>
+                </Routes>
+              </Suspense>
             </div>
           </main>
         </div>

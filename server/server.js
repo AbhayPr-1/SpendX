@@ -184,7 +184,7 @@ export async function startServer(port = PORT) {
   validateProductionConfiguration();
   await initializeDatabase();
 
-  const server = app.listen(port);
+  const server = app.listen(port, '127.0.0.1');
   await new Promise((resolve, reject) => {
     server.once('listening', resolve);
     server.once('error', reject);
